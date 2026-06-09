@@ -61,11 +61,16 @@
 (define-constant ERR_INVALID_SIGNATURE (err u2104))
 (define-constant ERR_UNTRUSTED_SIGNER (err u2105))
 
-;; Errors -- payload / feeds (Phase 2)
+;; Errors -- payload / feeds (Phase 2). The parsing folds carry their accumulator
+;; as a (response state uint): `(ok state)` while parsing, `(err ...)` once a step
+;; fails. That lets the fold callbacks and their helpers use try!/unwrap!/asserts!
+;; directly, and decode-payload surface the failure with a plain try!.
 (define-constant ERR_INVALID_PAYLOAD_MAGIC (err u2201))
 (define-constant ERR_TOO_MANY_FEEDS (err u2202))
-(define-constant ERR_INVALID_FEED_DATA (err u2203))
+(define-constant ERR_INVALID_FEED_DATA (err u2203)) ;; truncated / short read while parsing a feed
 (define-constant ERR_PAYLOAD_OVERLAY (err u2204))
+(define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; property type > MAX_PROPERTY_TYPE
+(define-constant ERR_TOO_MANY_PROPS (err u2206))    ;; feed declares more properties than exist
 
 ;;;; Public (read-only) API
 
@@ -121,87 +126,84 @@
 				(channel (unwrap! (read-uint-be? payload PAYLOAD_CHANNEL_OFFSET u1) ERR_INVALID_FEED_DATA))
 				(feeds-len (unwrap! (read-uint-be? payload PAYLOAD_FEEDS_LEN_OFFSET u1) ERR_INVALID_FEED_DATA)))
 			(asserts! (<= feeds-len MAX_FEEDS) ERR_TOO_MANY_FEEDS)
-			(let ((result (fold parse-feed-slot FEED_SLOTS
-					{ bytes: payload, offset: FEEDS_OFFSET, remaining: feeds-len, ok: true, feeds: (list) })))
-				;; A feed/property read failed, or feedsLen mismatched the data.
-				(asserts! (get ok result) ERR_INVALID_FEED_DATA)
+			;; `try!` surfaces the specific parse error the fold recorded, if any.
+			(let ((state (try! (fold parse-feed-slot FEED_SLOTS
+					(ok { bytes: payload, offset: FEEDS_OFFSET, remaining: feeds-len, feeds: (list) })))))
 				;; The feeds must consume the payload exactly (no trailing overlay).
-				(asserts! (is-eq (get offset result) (len payload)) ERR_PAYLOAD_OVERLAY)
+				(asserts! (is-eq (get offset state) (len payload)) ERR_PAYLOAD_OVERLAY)
 				(ok {
 					timestamp: timestamp,
 					channel: channel,
-					price-feeds: (get feeds result)
+					price-feeds: (get feeds state)
 				})))))
 
-;; One outer-fold step: parse a single feed at the cursor and append its record.
+;; One outer-fold step. The accumulator is `(response state uint)`: pass through
+;; once errored (`e (err e)`) or once all declared feeds are parsed (remaining 0);
+;; otherwise parse the next feed at the cursor and append it.
 (define-private (parse-feed-slot
 		(slot uint)
-		(acc { bytes: (buff 8192), offset: uint, remaining: uint, ok: bool,
-			feeds: (list 16 { feed-id: uint, price: (optional int), exponent: (optional int), confidence: (optional uint) }) }))
-	(if (or (not (get ok acc)) (is-eq (get remaining acc) u0))
-		acc
-		(match (parse-one-feed (get bytes acc) (get offset acc))
-			parsed
-				(merge acc {
-					offset: (get offset parsed),
-					remaining: (- (get remaining acc) u1),
-					;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant.
-					feeds: (unwrap-panic (as-max-len? (append (get feeds acc) (get feed parsed)) u16)) })
-			(merge acc { ok: false }))))
+		(acc (response { bytes: (buff 8192), offset: uint, remaining: uint,
+			feeds: (list 16 { feed-id: uint, price: (optional int), exponent: (optional int), confidence: (optional uint) }) } uint)))
+	(match acc
+		state
+			(if (is-eq (get remaining state) u0)
+				acc
+				(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state)))))
+					(ok (merge state {
+						offset: (get offset parsed),
+						remaining: (- (get remaining state) u1),
+						;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant.
+						feeds: (unwrap-panic (as-max-len? (append (get feeds state) (get feed parsed)) u16)) }))))
+		e (err e)))
 
 ;; Parse one feed (feed-id, num-properties, then its properties). Returns the
-;; assembled record plus the offset immediately after the feed, or none on error.
+;; assembled record plus the offset immediately after the feed.
 (define-private (parse-one-feed (bytes (buff 8192)) (offset uint))
-	(match (read-uint-be? bytes offset u4)
-		feed-id
-			(match (read-uint-be? bytes (+ offset u4) u1)
-				num-props
-					(let ((parsed (fold parse-property PROPERTY_SLOTS
-							{ bytes: bytes, offset: (+ offset u5), remaining: num-props, ok: true,
-								price: none, exponent: none, confidence: none })))
-						(if (and (get ok parsed) (is-eq (get remaining parsed) u0))
-							(some {
-								feed: { feed-id: feed-id, price: (get price parsed),
-									exponent: (get exponent parsed), confidence: (get confidence parsed) },
-								offset: (get offset parsed) })
-							none))
-				none)
-		none))
+	(let ((feed-id (unwrap! (read-uint-be? bytes offset u4) ERR_INVALID_FEED_DATA))
+			(num-props (unwrap! (read-uint-be? bytes (+ offset u4) u1) ERR_INVALID_FEED_DATA))
+			(parsed (try! (fold parse-property PROPERTY_SLOTS
+				(ok { bytes: bytes, offset: (+ offset u5), remaining: num-props,
+					price: none, exponent: none, confidence: none })))))
+		;; Every declared property must have been consumed (num-props <= PROPERTY_SLOTS).
+		(asserts! (is-eq (get remaining parsed) u0) ERR_TOO_MANY_PROPS)
+		(ok {
+			feed: { feed-id: feed-id, price: (get price parsed),
+				exponent: (get exponent parsed), confidence: (get confidence parsed) },
+			offset: (get offset parsed)
+		})))
 
-;; One inner-fold step: read a property's type, persist it if relevant, and
-;; advance the cursor by 1 (type byte) + the property's value width.
+;; One inner-fold step. Like parse-feed-slot, the accumulator is a response: read
+;; the next property's type, persist it if relevant, and advance the cursor by
+;; 1 (type byte) + the property's value width.
 (define-private (parse-property
 		(slot uint)
-		(acc { bytes: (buff 8192), offset: uint, remaining: uint, ok: bool,
-			price: (optional int), exponent: (optional int), confidence: (optional uint) }))
-	(if (or (not (get ok acc)) (is-eq (get remaining acc) u0))
-		acc
-		(match (read-uint-be? (get bytes acc) (get offset acc) u1)
-			ptype
-				(if (> ptype MAX_PROPERTY_TYPE)
-					(merge acc { ok: false }) ;; unknown property type -> unknown width, cannot continue
-					(let ((voffset (+ (get offset acc) u1))
-							(updated (set-property-field ptype (get bytes acc) voffset acc)))
-						(if (get ok updated)
-							(merge updated {
-								offset: (+ voffset (property-width ptype)),
-								remaining: (- (get remaining acc) u1) })
-							updated)))
-			(merge acc { ok: false }))))
+		(acc (response { bytes: (buff 8192), offset: uint, remaining: uint,
+			price: (optional int), exponent: (optional int), confidence: (optional uint) } uint)))
+	(match acc
+		state
+			(if (is-eq (get remaining state) u0)
+				acc
+				(let ((ptype (unwrap! (read-uint-be? (get bytes state) (get offset state) u1) ERR_INVALID_FEED_DATA)))
+					(asserts! (<= ptype MAX_PROPERTY_TYPE) ERR_UNKNOWN_PROPERTY)
+					(let ((advanced (try! (set-property-field ptype (get bytes state) (+ (get offset state) u1) state))))
+						(ok (merge advanced {
+							offset: (+ (get offset state) u1 (property-width ptype)),
+							remaining: (- (get remaining state) u1) })))))
+		e (err e)))
 
-;; Extract the value of a persisted property into the accumulator; pass through
-;; (advance only) for properties we don't persist. Marks ok=false on a short read.
+;; Extract the value of a persisted property into the state; pass through
+;; (advance only) for properties we don't persist. Errors on a short read.
 (define-private (set-property-field
 		(ptype uint) (bytes (buff 8192)) (voffset uint)
-		(acc { bytes: (buff 8192), offset: uint, remaining: uint, ok: bool,
+		(state { bytes: (buff 8192), offset: uint, remaining: uint,
 			price: (optional int), exponent: (optional int), confidence: (optional uint) }))
 	(if (is-eq ptype PROP_PRICE)
-		(match (read-int-be? bytes voffset u8) v (merge acc { price: (some v) }) (merge acc { ok: false }))
+		(ok (merge state { price: (some (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
 		(if (is-eq ptype PROP_EXPONENT)
-			(match (read-int-be? bytes voffset u2) v (merge acc { exponent: (some v) }) (merge acc { ok: false }))
+			(ok (merge state { exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
 			(if (is-eq ptype PROP_CONFIDENCE)
-				(match (read-uint-be? bytes voffset u8) v (merge acc { confidence: (some v) }) (merge acc { ok: false }))
-				acc))))
+				(ok (merge state { confidence: (some (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+				(ok state)))))
 
 ;; Value width (bytes) per property type (PLAN 3.4 / PythLazerStructs):
 ;;   3 PublisherCount(u16), 4 Exponent(i16) -> 2 ; 9 MarketSession(u8) -> 1 ;
@@ -227,8 +229,8 @@
 		(merge acc { trusted: true })
 		acc))
 
-;;;; Byte readers (big-endian; sizes <= 16). Optional-returning so folds can
-;;;; `match` on a clean none branch.
+;;;; Byte readers (big-endian; sizes <= 16). Optional-returning so callers can
+;;;; `unwrap!` with a contextual error.
 
 (define-private (read-uint-be? (bytes (buff 8192)) (pos uint) (size uint))
 	(match (slice? bytes pos (+ pos size))

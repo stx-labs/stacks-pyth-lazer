@@ -15,8 +15,10 @@ const REAL_TIME = 1; // Channel::RealTime
 // Phase 2 error codes
 const ERR_INVALID_PAYLOAD_MAGIC = 2201;
 const ERR_TOO_MANY_FEEDS = 2202;
-const ERR_INVALID_FEED_DATA = 2203;
+const ERR_INVALID_FEED_DATA = 2203; // truncated / short read
 const ERR_PAYLOAD_OVERLAY = 2204;
+const ERR_UNKNOWN_PROPERTY = 2205;
+const ERR_TOO_MANY_PROPS = 2206;
 
 function trust() {
   simnet.callPublicFn(
@@ -114,10 +116,27 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     expect(decode(payload)).toBeErr(Cl.uint(ERR_TOO_MANY_FEEDS));
   });
 
-  it("rejects an unknown property type", () => {
+  it("rejects an unknown property type (distinct error code)", () => {
     trust();
     const payload = buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds: [{ id: 1, props: [[13, 1n]] }] });
-    expect(decode(payload)).toBeErr(Cl.uint(ERR_INVALID_FEED_DATA));
+    expect(decode(payload)).toBeErr(Cl.uint(ERR_UNKNOWN_PROPERTY));
+  });
+
+  it("rejects a feed that declares more properties than exist (distinct error code)", () => {
+    trust();
+    const props: Array<[number, bigint]> = [];
+    for (let i = 0; i < 14; i++) props.push([PROP.Price, 1n]); // 14 > 13 property slots
+    const payload = buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds: [{ id: 1, props }] });
+    expect(decode(payload)).toBeErr(Cl.uint(ERR_TOO_MANY_PROPS));
+  });
+
+  it("rejects a truncated feed (short read mid-property)", () => {
+    trust();
+    // Build a valid feed, then drop the last few bytes of the payload so the
+    // declared property value runs past the end.
+    const full = buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds: [{ id: 1, props: [[PROP.Price, 1n]] }] });
+    const truncated = full.slice(0, full.length - 3);
+    expect(decode(truncated)).toBeErr(Cl.uint(ERR_INVALID_FEED_DATA));
   });
 
   it("rejects trailing overlay bytes in the payload", () => {
