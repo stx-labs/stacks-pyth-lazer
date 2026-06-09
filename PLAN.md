@@ -59,11 +59,12 @@ implementation and pin to a commit; the values below are the design reference.**
 Lazer can emit three encodings of the same payload:
 
 - **`evm`** — secp256k1 ECDSA over `keccak256(payload)`, 65-byte signature. ← **we use this**
-- `solana` — ed25519 (Clarity has no native ed25519 → not usable directly).
+- `solana` — ed25519 (no native ed25519 until Clarity 6's `ed25519-verify`; see §4.1).
 - `leUnsigned` — no signature (off-chain use only).
 
-The `evm` format is the only one Clarity can verify with native ops, which is why this
-project targets it. We request the `evm` format from the Lazer API / SDK.
+The `evm` format is the only one Clarity 5 can verify with native ops, which is why this
+project targets it. We request the `evm` format from the Lazer API / SDK. (Clarity 6 would
+also make the `solana`/ed25519 format viable — §4.1.)
 
 ### 3.2 EVM update envelope (`PythLazer.sol::verifyUpdate`)
 
@@ -141,6 +142,9 @@ Notes:
 - Each signer has an **`expiresAt`** timestamp; a signature is valid only while
   `now < expiresAt`. Supports key rotation (add new, let old expire).
 - EVM stores up to 100 signers; on Stacks a small list (e.g. `(list 16 {...})`) is plenty.
+- We store the **compressed pubkey** and compare it directly to `secp256k1-recover?`'s output,
+  so no `secp256k1-decompress?` (Clarity 6) is needed. The EVM contract instead keys on a
+  20-byte ETH address; matching *that* form on-chain would require decompression — see §4.1.
 
 ### 3.6 What governance model does Pyth itself prescribe?
 
@@ -168,10 +172,32 @@ production. This settles decision #1 below.
 | Compare recovered ↔ trusted key | buffer `is-eq` | ✅ trivial |
 | Byte parsing (uint8/16/32/64, int16/32/64, buff slices) | `slice?`, `buff-to-uint-be`, `buff-to-int-be`, `bit-shift-*` | ✅ port helpers from decoder/governance verbatim |
 | Staleness vs wall clock | `get-stacks-block-info? time` (seconds) | ✅ pattern from `pyth-storage-v4` (must convert µs→s) |
-| ed25519 | ❌ none | n/a — we use the `evm`/secp256k1 format |
+| ed25519 (Lazer `solana` fmt) | ❌ not in Clarity 5 (Clarity 6: `ed25519-verify`) | n/a — v1 uses the `evm`/secp256k1 format |
 
-**Conclusion: fully feasible with native Clarity, no new cryptography.** The hard part is
+**Conclusion: fully feasible with native Clarity 5, no new cryptography.** The hard part is
 faithful byte-parsing + good fixtures, not crypto.
+
+### 4.1 Clarity version: target 5 now, Clarity 6 on the horizon
+
+Target **Clarity 5** (`Clarinet.toml`: `clarity_version = 5`, with the matching `epoch` —
+confirm the exact Stacks epoch that ships Clarity 5 at scaffold). The old bridge is on
+Clarity 3; nothing here needs anything newer than Clarity 5.
+
+Clarity 6 (SIP-43; activates at Stacks **Epoch 4.0**, not yet live) adds built-ins that would
+simplify this project. Ship the Clarity 5 path now and tag each spot with a `;; CLARITY6:`
+comment so they're trivial to find when Epoch 4.0 lands. Because the **decoder is our one
+swappable contract (§6.4)**, adopting Clarity 6 later is just "deploy a Clarity 6 `decoder-v2`
+and re-bless it" — no migration of the rest.
+
+| Clarity 6 feature | Where it would help here | Clarity 5 path we ship now |
+|---|---|---|
+| `secp256k1-decompress?` | Derive an ETH **address** from the recovered compressed key on-chain (the SIP gives this exact example) → enables address-form trusted-signer identity | Use **compressed-pubkey** identity: compare `secp256k1-recover?`'s 33-byte output directly to the stored key — no decompression (§3.5). Avoids the Wormhole-style uncompressed-key workaround the SIP cites as a downtime cause. |
+| `ed25519-verify` | Verify Lazer's `solana` (ed25519) format, removing the secp256k1-only lock | secp256k1 only — request the `evm` format from Lazer (§3.1). |
+| variadic `concat` | Flatter buffer assembly `(concat a b c d)` | nested `concat` — **low impact here**; the decoder is slice/parse-dominant, so this is mostly test-fixture / re-serialization readability. |
+| `_` / underscore bindings | Discard unused accumulator fields in fold-based parsers without linter noise | name and ignore the binding. |
+
+The first two are the substantive ones; variadic `concat` and `_` are readability niceties
+given how little this codebase concatenates or serializes.
 
 ---
 
@@ -374,9 +400,9 @@ admin `contract-call?`s.
 
 Each phase is independently reviewable/mergeable.
 
-- **Phase 0 — scaffold.** `Clarinet.toml`, project layout, vitest + `clarinet-sdk` harness,
-  CI, README. Port the byte-reader helpers (`read-uint-*`, `read-int-*`, `read-buff-*`,
-  `slice`) into a shared place. _No protocol logic yet._
+- **Phase 0 — scaffold.** `Clarinet.toml` (**`clarity_version = 5`**, §4.1), project layout,
+  vitest + `clarinet-sdk` harness, CI, README. Port the byte-reader helpers (`read-uint-*`,
+  `read-int-*`, `read-buff-*`, `slice`) into a shared place. _No protocol logic yet._
 - **Phase 1 — signature verification.** `pyth-lazer-decoder` envelope parse +
   `secp256k1-recover?` + trusted-signer check (signers hardcoded/configured). Unit-test
   against a **real `evm` update fixture** pulled from the Lazer API. _This de-risks the
