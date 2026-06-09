@@ -212,7 +212,7 @@ decoder.
         │                                       │   (passes <decoder> as a trait param)
         ▼                                       ▼
  ┌────────────────────────┐ write (auth) ┌──────────────────────────┐
- │  pyth-lazer-storage     │◄─────────────│   pyth-lazer-oracle       │
+ │  pyth-lazer-storage     │◄─────────────│  pyth-lazer-oracle-v1     │
  │  ── IMMUTABLE ──        │ hardcoded ref│  thin orchestrator;       │
  │  feed-id → price record │              │  hardcodes storage +      │
  │  + monotonic guard      │              │  governance; charges fee  │
@@ -220,7 +220,7 @@ decoder.
             │ reads stale threshold                     │ decode + verify
             │                                            ▼  (param validated vs governance)
             │                                ┌──────────────────────────┐
-            │                                │  pyth-lazer-decoder        │ ── SWAPPABLE ──
+            │                                │  pyth-lazer-decoder-v1     │ ── SWAPPABLE ──
             │                                │  sig recovery + trusted-   │
             │                                │  signer validation         │
             │                                └─────────────┬────────────┘
@@ -235,7 +235,7 @@ Contracts:
 
 - **`pyth-lazer-traits`** ⟨immutable⟩ — `storage-trait`, `decoder-trait`, `proxy-trait`.
   Feed id is `uint`; no `wormhole-core-trait`.
-- **`pyth-lazer-decoder`** ⟨**swappable** — the only volatile contract⟩ — owns the
+- **`pyth-lazer-decoder-v1`** ⟨**swappable** — the only volatile contract⟩ — owns the
   security-critical path; passed to the oracle as a trait param, validated against governance's
   blessed decoder principal. Steps:
   1. check `EVM_FORMAT_MAGIC`, slice signature + payload;
@@ -247,12 +247,20 @@ Contracts:
   time guard, one admin-settable `authorized-writer`, and `print` events. Generous schema
   (optionals for deferred fields) so it never needs a shape change. The **stable read anchor**
   (readers call it directly); the staleness read pulls the threshold from governance (µs→s).
-- **`pyth-lazer-oracle`** — thin orchestrator + stable **write** entry:
+- **`pyth-lazer-oracle-v1`** — thin orchestrator + stable **write** entry:
   `verify-and-update-price-feeds` (takes the `<decoder>` param), charges fee. Hardcodes
   `.pyth-lazer-storage` + `.pyth-lazer-governance`.
 - **`pyth-lazer-governance`** ⟨immutable⟩ — config state: admin (defaults to deployer, §3.6),
   trusted-signer list `{pubkey, expires-at}`, fee, stale threshold, + admin-gated
   setters/getters. Carries the §6a improvement TODO as a header comment.
+
+**Naming convention:** updateable contracts carry a `-vN` suffix in their contract id
+(`pyth-lazer-decoder-v1`, `pyth-lazer-oracle-v1`) so a successor can be deployed and switched
+to (Stacks contracts are immutable once deployed). The permanent substrate —
+`pyth-lazer-traits`, `pyth-lazer-storage`, `pyth-lazer-governance` — is **unversioned** so its
+addresses never move; `decoder-v1` and a future `decoder-v2` both implement the same
+unversioned `pyth-lazer-traits`. (Per old-bridge style, the `.clar` `;; Title:` stays the base
+name and `;; Version:` carries the number.)
 
 > Mutability rationale, rejected alternatives, and replay analysis: **§6.4**
 > (principle: *upgrade the logic, not the state*).
@@ -300,7 +308,7 @@ freshly redeployed governance, and where did the signer list go?").
 
 Applying it:
 
-- **Only `pyth-lazer-decoder` is swappable.** It owns the security-critical hot path
+- **Only `pyth-lazer-decoder-v1` is swappable.** It owns the security-critical hot path
   (signature recovery + trusted-signer validation), so a bug there *is* fixable. The oracle
   receives it as a trait parameter and validates `(contract-of decoder)` against governance's
   blessed decoder principal; the admin re-blesses a `decoder-v2` to upgrade. No execution-plan
@@ -316,7 +324,7 @@ Applying it:
   Its residual logic (signer add/update/remove) is admin-only and low-severity (expiry
   mitigates a stuck signer). Reassigning the admin to a multisig/DAO is a value change, not a
   contract change.
-- **`pyth-lazer-oracle`** is a thin orchestrator and the stable *write* entry. It hardcodes
+- **`pyth-lazer-oracle-v1`** is a thin orchestrator and the stable *write* entry. It hardcodes
   `.pyth-lazer-storage` + `.pyth-lazer-governance` (compile-time refs — a future oracle
   re-points to the *same* storage via its `authorized-writer`). Redeployed only for rare
   orchestration/fee changes; readers are unaffected because they read storage directly.
@@ -381,7 +389,7 @@ admin `contract-call?`s.
 - `set-authorized-writer (principal)` (storage) — re-point to a redeployed oracle.
 
 **Usage — anyone (not the admin):**
-- `verify-and-update-price-feeds (update (buff N))` on `pyth-lazer-oracle` — submit a Lazer
+- `verify-and-update-price-feeds (update (buff N))` on `pyth-lazer-oracle-v1` — submit a Lazer
   update; verifies signature, writes prices, pays fee. Relayers/dapps call this.
 - `read-price-feed (feed-id uint)` / `get-price (feed-id uint)` — consumers read prices.
 

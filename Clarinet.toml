@@ -1,0 +1,49 @@
+[project]
+name = "stacks-pyth-lazer"
+description = "Stacks <> Pyth Lazer oracle — Clarity contracts consuming Pyth Lazer signed price updates. See PLAN.md."
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+# [contracts.counter]
+# path = "contracts/counter.clar"
+# epoch = "latest"
+
+# Check-checker settings:
+# trusted_sender: if true, inputs are trusted after tx_sender has been checked.
+# trusted_caller: if true, inputs are trusted after contract-caller has been checked.
+# callee_filter: if true, untrusted data may be passed into a private function without a
+# warning, if it gets checked inside. This check will also propagate up to the
+# caller.
+# More informations: https://www.hiro.so/blog/new-safety-checks-in-clarinet
+
+[repl.analysis]
+passes = ["check_checker"]
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts]
+
+[contracts.pyth-lazer-traits]
+path = "contracts/pyth-lazer-traits.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.pyth-lazer-storage]
+path = "contracts/pyth-lazer-storage.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.pyth-lazer-governance]
+path = "contracts/pyth-lazer-governance.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.pyth-lazer-decoder-v1]
+path = "contracts/pyth-lazer-decoder-v1.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.pyth-lazer-oracle-v1]
+path = "contracts/pyth-lazer-oracle-v1.clar"
+clarity_version = 5
+epoch = "latest"
