@@ -1,28 +1,27 @@
 # Stacks ⇄ Pyth Lazer
 
-Clarity contracts that bring **Pyth Lazer** ("Pyth Pro") signed price feeds to the Stacks
-blockchain — the successor to [`stacks-pyth-bridge`](../stacks-pyth-bridge), which depends on
-Pythnet + Wormhole (being sunset).
+Clarity contracts that bring **Pyth Lazer** ("Pyth Pro") signed price feeds to the Stacks blockchain.
+This is the successor to [`stacks-pyth-bridge`](../stacks-pyth-bridge), which depends on Pythnet (deprecated) + Wormhole.
 
 > **Status: Phase 0 scaffold.** Contracts are documented skeletons; protocol logic lands in
 > Phases 1–6. The full design and rationale live in **[`PLAN.md`](./PLAN.md)**.
 
-## How it works (short version)
+## How it works
 
-A relayer fetches a Lazer update in the **`evm`** format (one secp256k1 ECDSA signature over
-`keccak256(payload)`) and submits it on-chain. The oracle recovers the signer, checks it
-against the trusted-signer set, parses the feeds, and stores the latest price per feed. No
-Wormhole, no Merkle proofs — see [`PLAN.md`](./PLAN.md) §1–3.
+A relayer fetches a Lazer update in the **`evm`** format (one secp256k1 ECDSA signature over `keccak256(payload)`) and submits it on-chain.
+The oracle recovers the signer, checks it against the trusted-signer set, parses the feeds, and stores the latest price per feed.
+
+This is a simpler architecture than [`stacks-pyth-bridge`](../stacks-pyth-bridge): No Wormhole, no Merkle proofs
 
 ## Contracts
 
 | Contract | Mutability | Role |
 |---|---|---|
-| `pyth-lazer-traits` | immutable | trait definitions (storage / decoder / proxy) |
-| `pyth-lazer-decoder-v1` | **swappable** | envelope parse + secp256k1 verify + signer check + payload parse |
-| `pyth-lazer-storage` | immutable | durable `feed-id -> price` store; the stable **read anchor** |
-| `pyth-lazer-oracle-v1` | thin / stable | write entry point; orchestrates decode → store → fee |
-| `pyth-lazer-governance` | immutable | admin, trusted signers, fee, stale threshold (config state) |
+| `pyth-lazer-traits` | immutable | Trait definitions |
+| `pyth-lazer-decoder-v1` | **swappable** | Parse message and verify signatures |
+| `pyth-lazer-storage` | immutable | Permanant storage for price data |
+| `pyth-lazer-oracle-v1` | thin / stable | Entry point for submitting feed updates |
+| `pyth-lazer-governance` | immutable | Protocol governance (admin, trusted signers, fee, stale threshold) |
 
 Design principle: **upgrade the logic, not the state** — only the decoder is swappable
 (see [`PLAN.md`](./PLAN.md) §6.4).
@@ -33,9 +32,9 @@ successor can be deployed and switched to; the permanent substrate (`-traits`, `
 
 ## Clarity version
 
-Built for **Clarity 5** (`clarity_version = 5` in `Clarinet.toml`). Spots that would benefit
-from **Clarity 6** (SIP-43: `secp256k1-decompress?`, `ed25519-verify`, variadic `concat`) are
-marked with `;; CLARITY6:` comments — see [`PLAN.md`](./PLAN.md) §4.1.
+Currently built for **Clarity 5**.
+Spots that would benefit from **Clarity 6** (SIP-43: `secp256k1-decompress?`, `ed25519-verify`, variadic `concat`)
+are marked with `;; CLARITY6:` comments — see [`PLAN.md`](./PLAN.md) §4.1.
 
 ## Quick start
 
@@ -43,14 +42,4 @@ marked with `;; CLARITY6:` comments — see [`PLAN.md`](./PLAN.md) §4.1.
 clarinet check          # type-check all contracts (no Node required)
 npm install             # install the clarinet-sdk + vitest test harness
 npm test                # run the unit-test suite (simnet)
-```
-
-## Layout
-
-```
-contracts/        Clarity contracts (.clar)
-tests/            vitest unit tests (clarinet-sdk simnet)
-settings/         per-network Clarinet settings
-Clarinet.toml     project + contract manifest (Clarity 5)
-PLAN.md           full design, decisions, and phased build plan
 ```
