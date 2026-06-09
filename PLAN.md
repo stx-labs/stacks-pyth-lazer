@@ -418,18 +418,26 @@ Each phase is independently reviewable/mergeable.
   defaults to deployer) so the decoder stays pure (per §6.4). Tested with a synthetic
   `evm` fixture (real secp256k1 sig over keccak256 via `@noble/curves`): valid recovery,
   bad magic, short input, oversized length, overlay bytes, untrusted/expired/tampered → reject.
-  _TODO: add a **real** Lazer `evm` fixture in Phase 2 (meaningful once the payload byte
-  layout is parsed); the synthetic fixture already exercises the identical crypto path._
-- **Phase 2 — payload parsing.** Compose `decode-and-verify-price-feeds` (public; the
-  decoder-trait method) = `verify-update` then parse the payload. Header
-  (magic/timestamp/channel/feedsLen) + property-driven feed walker → list of price records.
-  Table-driven property widths. Fixtures with 1, N, and max feeds; varying property sets.
+  _TODO: add a **real** Lazer `evm` fixture (see Phase 2 note); the synthetic fixture already
+  exercises the identical crypto path._
+- **Phase 2 — payload parsing. ✅ DONE.** `decode-and-verify-price-feeds` =
+  `verify-update` then `decode-payload`: header (magic/timestamp/channel/feedsLen) + a
+  property-driven, two-bounded-fold feed walker → per-feed `{ feed-id, price?, exponent?,
+  confidence? }`, with a table of property widths to skip non-persisted properties and a final
+  `offset == len(payload)` exact-consumption check. `MAX_FEEDS = 16`. Tested (synthetic
+  payloads): single/multi feed, negative price, skipped non-persisted props, omitted props →
+  `none`, wrong magic, too-many-feeds, unknown property type, payload overlay.
+  _**OPEN (carry to Phase 5): real-fixture endianness.** Synthetic fixtures prove the parser is
+  self-consistent but cannot catch a big-endian/little-endian mismatch with production Lazer
+  data. The parser follows the EVM `PythLazerLib` (big-endian); confirm against a real `evm`
+  update from the Lazer API before mainnet._
 - **Phase 3 — storage.** Feed map, newer-price guard, staleness (µs→s conversion), events.
 - **Phase 4 — oracle + governance.** Wire the oracle entry points + fee, the immutable
   governance (admin + trusted-signer management/expiry, #1), and the oracle's validation of
   the `<decoder>` trait param against governance's blessed decoder (§6.4). No execution-plan.
 - **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests, gas/cost
-  review, fuzz the parser against the Rust/JS SDK output, audit prep.
+  review, fuzz the parser against the Rust/JS SDK output, **validate byte order against a real
+  Lazer `evm` fixture** (the open item from Phase 2), audit prep.
 - **Phase 6 — deployment.** Testnet deploy + plan, a worked consumer example (port the
   `example/cbtc` integration), mainnet deployment plan, README with addresses.
 
