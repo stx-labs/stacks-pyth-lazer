@@ -408,16 +408,22 @@ admin `contract-call?`s.
 
 Each phase is independently reviewable/mergeable.
 
-- **Phase 0 — scaffold.** `Clarinet.toml` (**`clarity_version = 5`**, §4.1), project layout,
-  vitest + `clarinet-sdk` harness, CI, README. Port the byte-reader helpers (`read-uint-*`,
-  `read-int-*`, `read-buff-*`, `slice`) into a shared place. _No protocol logic yet._
-- **Phase 1 — signature verification.** `pyth-lazer-decoder` envelope parse +
-  `secp256k1-recover?` + trusted-signer check (signers hardcoded/configured). Unit-test
-  against a **real `evm` update fixture** pulled from the Lazer API. _This de-risks the
-  whole project — prove one real signature verifies before building anything else._
-- **Phase 2 — payload parsing.** Header (magic/timestamp/channel/feedsLen) + property-driven
-  feed walker → list of price records. Table-driven property widths. Fixtures with 1, N, and
-  max feeds; varying property sets.
+- **Phase 0 — scaffold. ✅ DONE.** `Clarinet.toml` (`clarity_version = 5`), project layout,
+  vitest + `clarinet-sdk` harness, CI, README, byte-reader helpers ported into the decoder.
+- **Phase 1 — signature verification. ✅ DONE.** `pyth-lazer-decoder-v1`:
+  `recover-signer` (envelope parse → `keccak256` → `secp256k1-recover?` → `{signer, payload}`,
+  with magic / length / overlay guards) and `verify-update` (+ trusted-signer membership +
+  expiry, reading the list from governance). Also stood up the **governance trusted-signer
+  slice** (`get-trusted-signers` / admin-gated `set-trusted-signers` / `set-admin`; admin
+  defaults to deployer) so the decoder stays pure (per §6.4). Tested with a synthetic
+  `evm` fixture (real secp256k1 sig over keccak256 via `@noble/curves`): valid recovery,
+  bad magic, short input, oversized length, overlay bytes, untrusted/expired/tampered → reject.
+  _TODO: add a **real** Lazer `evm` fixture in Phase 2 (meaningful once the payload byte
+  layout is parsed); the synthetic fixture already exercises the identical crypto path._
+- **Phase 2 — payload parsing.** Compose `decode-and-verify-price-feeds` (public; the
+  decoder-trait method) = `verify-update` then parse the payload. Header
+  (magic/timestamp/channel/feedsLen) + property-driven feed walker → list of price records.
+  Table-driven property widths. Fixtures with 1, N, and max feeds; varying property sets.
 - **Phase 3 — storage.** Feed map, newer-price guard, staleness (µs→s conversion), events.
 - **Phase 4 — oracle + governance.** Wire the oracle entry points + fee, the immutable
   governance (admin + trusted-signer management/expiry, #1), and the oracle's validation of
