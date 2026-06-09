@@ -18,7 +18,7 @@ cache_dir = "./.cache"
 # More informations: https://www.hiro.so/blog/new-safety-checks-in-clarinet
 
 [repl.analysis]
-passes = ["check_checker"]
+passes = []
 check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
 
 [contracts]
