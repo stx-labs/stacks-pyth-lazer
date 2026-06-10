@@ -59,3 +59,26 @@ describe("pyth-lazer-governance: trusted-signer slice", () => {
     expect(fresh.result).toBeOk(Cl.bool(true));
   });
 });
+
+describe("pyth-lazer-governance: stale-price threshold", () => {
+  // simnet is not mainnet, so the default is the ~5-year window (seconds).
+  const DEFAULT_THRESHOLD = 5n * 365n * 24n * 60n * 60n;
+
+  it("defaults to the ~5-year non-mainnet window", () => {
+    const { result } = simnet.callReadOnlyFn(GOV, "get-stale-price-threshold", [], deployer);
+    expect(result).toBeUint(DEFAULT_THRESHOLD);
+  });
+
+  it("lets the admin override the threshold", () => {
+    const set = simnet.callPublicFn(GOV, "set-stale-price-threshold", [Cl.uint(3600n)], deployer);
+    expect(set.result).toBeOk(Cl.bool(true));
+
+    const read = simnet.callReadOnlyFn(GOV, "get-stale-price-threshold", [], deployer);
+    expect(read.result).toBeUint(3600n);
+  });
+
+  it("rejects a non-admin trying to set the threshold", () => {
+    const { result } = simnet.callPublicFn(GOV, "set-stale-price-threshold", [Cl.uint(3600n)], wallet1);
+    expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+});

@@ -12,10 +12,10 @@
 ;;   - Timestamps are stored in microseconds (decision #3).
 ;;   - The stored price record uses a generous schema, with `(optional ...)` for
 ;;     fields the v1 decoder does not yet populate so storage never needs a
-;;     shape change (PLAN 6.4), e.g.:
+;;     shape change (PLAN 6.4). Locked in Phase 3 (pyth-lazer-storage):
 ;;
-;;       { price: int, expo: int, conf: uint, publish-time: uint,
-;;         ema-price: (optional int), ema-conf: (optional uint),
+;;       { price: int, exponent: int, confidence: uint, publish-time: uint,
+;;         channel: uint, ema-price: (optional int), ema-confidence: (optional uint),
 ;;         best-bid: (optional int), best-ask: (optional int) }
 ;;
 ;; Planned traits:

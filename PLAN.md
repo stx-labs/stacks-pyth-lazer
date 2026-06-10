@@ -431,10 +431,22 @@ Each phase is independently reviewable/mergeable.
   self-consistent but cannot catch a big-endian/little-endian mismatch with production Lazer
   data. The parser follows the EVM `PythLazerLib` (big-endian); confirm against a real `evm`
   update from the Lazer API before mainnet._
-- **Phase 3 — storage.** Feed map, newer-price guard, staleness (µs→s conversion), events.
-- **Phase 4 — oracle + governance.** Wire the oracle entry points + fee, the immutable
-  governance (admin + trusted-signer management/expiry, #1), and the oracle's validation of
-  the `<decoder>` trait param against governance's blessed decoder (§6.4). No execution-plan.
+- **Phase 3 — storage. ✅ DONE.** `pyth-lazer-storage`: `prices` map (`uint` feed-id → generous
+  record, with the deferred properties reserved as `(optional …)` so the immutable `write`
+  signature never has to change — #4 / §6.4); a strictly-monotonic per-feed publish-time guard
+  (the replay defense, §6.4); batch `write` (≤16 feeds, partial-success/last-write-wins) gated
+  by an admin-settable `authorized-writer` via `contract-caller`; `get-price` (raw) and
+  `read-price-with-staleness-check` (reads the threshold from governance, µs→s, additive form to
+  avoid uint underflow — #3); and `print` events. Pulled the **stale-price-threshold** slice
+  into `pyth-lazer-governance` here (var + getter + admin setter, default 2 h mainnet / 5 y else)
+  because storage's staleness read depends on it. The `authorized-writer` setter is gated by
+  governance's admin (single-admin, #1). Tested: writer auth (unset/non-admin/wrong-caller),
+  write+read, not-found, monotonic guard (older/equal skipped, newer accepted), per-entry batch
+  partial success, and staleness fresh/stale/not-found.
+- **Phase 4 — oracle + governance.** Wire the oracle entry points + fee, the rest of
+  immutable governance (admin + trusted-signer management/expiry #1; **stale threshold already
+  landed in Phase 3**; blessed decoder + fee remain), and the oracle's validation of the
+  `<decoder>` trait param against governance's blessed decoder (§6.4). No execution-plan.
 - **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests, gas/cost
   review, fuzz the parser against the Rust/JS SDK output, **validate byte order against a real
   Lazer `evm` fixture** (the open item from Phase 2), audit prep.

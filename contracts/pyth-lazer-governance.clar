@@ -6,8 +6,10 @@
 ;; decoder, which is what makes immutability safe.
 ;;
 ;; Phase 1 implements the trusted-signer slice (admin + signer list + setters).
-;; Phase 4 adds: blessed `decoder` principal, fee value (default u0), and the
-;; stale-price threshold, plus per-signer set/remove ergonomics.
+;; Phase 3 adds the stale-price threshold: `pyth-lazer-storage` reads it for its
+;; read-side staleness check (decision #3), so it lands with storage rather than
+;; in Phase 4. Phase 4 adds: blessed `decoder` principal and the fee value
+;; (default u0), plus per-signer set/remove ergonomics.
 ;;
 ;; TODO(governance): v1 uses a single `contract-admin` principal, defaulting to the deployer.
 ;; This mirrors Pyth's own reference contracts (single owner / top-authority). Options to
@@ -38,6 +40,13 @@
 	(list 16 { pubkey: (buff 33), expires-at: uint })
 	(list))
 
+;; Stale-price threshold, in SECONDS. Storage treats a stored price as fresh while
+;; `now - (publish-time / 1_000_000) <= threshold` (Lazer publish-time is in us;
+;; decision #3). Defaults mirror the old bridge: 2 hours on mainnet, ~5 years
+;; elsewhere, so simnet/testnet reads never go stale until an admin tightens it.
+(define-data-var stale-price-threshold uint
+	(if is-in-mainnet u7200 u157680000)) ;; 2h (2*60*60) mainnet / ~5y (5*365*24*60*60) else
+
 ;;;; Read-only getters
 
 (define-read-only (get-admin)
@@ -45,6 +54,9 @@
 
 (define-read-only (get-trusted-signers)
 	(var-get trusted-signers))
+
+(define-read-only (get-stale-price-threshold)
+	(var-get stale-price-threshold))
 
 ;;;; Admin functions
 
@@ -64,4 +76,12 @@
 		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
 		(var-set contract-admin new-admin)
 		(print { type: "admin", action: "updated", data: new-admin })
+		(ok true)))
+
+;; Override the staleness window (seconds). Section 7: occasional admin tuning.
+(define-public (set-stale-price-threshold (seconds uint))
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(var-set stale-price-threshold seconds)
+		(print { type: "stale-price-threshold", action: "updated", data: seconds })
 		(ok true)))
