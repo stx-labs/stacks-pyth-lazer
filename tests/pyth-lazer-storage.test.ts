@@ -26,23 +26,9 @@ type EntryOpts = {
   channel?: number;
 };
 
-// A `write` entry: core fields the v1 decoder populates + the reserved optionals
-// (always `none` for v1, matching what the oracle will pass).
-const entry = (o: EntryOpts) =>
-  Cl.tuple({
-    "feed-id": Cl.uint(o.feedId),
-    price: Cl.int(o.price ?? 0n),
-    exponent: Cl.int(o.exponent ?? -8n),
-    confidence: Cl.uint(o.confidence ?? 0n),
-    "publish-time": Cl.uint(o.publishTime),
-    channel: Cl.uint(o.channel ?? REAL_TIME),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
-    "best-bid": Cl.none(),
-    "best-ask": Cl.none(),
-  });
-
-// The stored record == a write entry minus its `feed-id` (the map key).
+// The stored record: core fields the v1 decoder populates + the reserved
+// optionals (always `none` for v1, matching what the oracle will pass). This is
+// exactly what `get-price` returns and what is stored under the feed-id key.
 const stored = (o: EntryOpts) =>
   Cl.tuple({
     price: Cl.int(o.price ?? 0n),
@@ -55,6 +41,11 @@ const stored = (o: EntryOpts) =>
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
   });
+
+// A `write` batch element: a {feed-id, record} pair. `record` is the value stored
+// verbatim under the key (no field-by-field rebuild on-chain).
+const entry = (o: EntryOpts) =>
+  Cl.tuple({ "feed-id": Cl.uint(o.feedId), record: stored(o) });
 
 // Authorize a writer (gated by governance's admin = deployer). The test sender
 // then calls `write` directly, so `contract-caller` equals this principal.

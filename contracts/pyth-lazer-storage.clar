@@ -100,55 +100,52 @@
 
 ;;;; Write API (authorized-writer only)
 
-;; Batch-write up to MAX_FEEDS price records (one Lazer update yields <= 16 feeds).
-;; Each entry passes the monotonic guard independently; entries that are not
-;; strictly newer than what is stored are skipped (last-write-wins, partial
-;; success), mirroring the old bridge. Returns the entries actually written.
+;; Batch-write up to MAX_FEEDS feeds (one Lazer update yields <= 16). Each batch
+;; element is a {feed-id, record} pair: `record` is stored verbatim under the
+;; feed-id key, so the key never lives inside the value. Each element passes the
+;; monotonic guard independently; elements not strictly newer than what is stored
+;; are skipped (last-write-wins, partial success), mirroring the old bridge.
+;; Returns the pairs actually written.
 (define-public (write (batch (list 16 {
 		feed-id: uint,
-		price: int,
-		exponent: int,
-		confidence: uint,
-		publish-time: uint,
-		channel: uint,
-		ema-price: (optional int),
-		ema-confidence: (optional uint),
-		best-bid: (optional int),
-		best-ask: (optional int),
+		record: {
+			price: int,
+			exponent: int,
+			confidence: uint,
+			publish-time: uint,
+			channel: uint,
+			ema-price: (optional int),
+			ema-confidence: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int),
+		},
 	})))
 	(begin
 		(asserts! (is-eq contract-caller (unwrap! (var-get authorized-writer) ERR_NO_AUTHORIZED_WRITER)) ERR_UNAUTHORIZED)
 		(ok (map unwrap-entry (filter is-ok-entry (map write-entry batch))))))
 
-;; Write one record if its publish-time is strictly newer than the stored one.
-;; The map-set (and event) only happen after the guard passes, so a rejected
-;; entry leaves storage untouched.
+;; Write one feed's record if its publish-time is strictly newer than the stored
+;; one. The record is stored as-is (it carries no feed-id -- that is the key), so
+;; no field-by-field rebuild is needed. The map-set (and event) only happen after
+;; the guard passes, so a rejected element leaves storage untouched.
 (define-private (write-entry (entry {
 		feed-id: uint,
-		price: int,
-		exponent: int,
-		confidence: uint,
-		publish-time: uint,
-		channel: uint,
-		ema-price: (optional int),
-		ema-confidence: (optional uint),
-		best-bid: (optional int),
-		best-ask: (optional int),
+		record: {
+			price: int,
+			exponent: int,
+			confidence: uint,
+			publish-time: uint,
+			channel: uint,
+			ema-price: (optional int),
+			ema-confidence: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int),
+		},
 	}))
 	(let ((feed-id (get feed-id entry))
-			(publish-time (get publish-time entry)))
-		(asserts! (is-update-newer feed-id publish-time) ERR_NEWER_PRICE_AVAILABLE)
-		(map-set prices feed-id {
-			price: (get price entry),
-			exponent: (get exponent entry),
-			confidence: (get confidence entry),
-			publish-time: publish-time,
-			channel: (get channel entry),
-			ema-price: (get ema-price entry),
-			ema-confidence: (get ema-confidence entry),
-			best-bid: (get best-bid entry),
-			best-ask: (get best-ask entry),
-		})
+			(record (get record entry)))
+		(asserts! (is-update-newer feed-id (get publish-time record)) ERR_NEWER_PRICE_AVAILABLE)
+		(map-set prices feed-id record)
 		(print { type: "price-feed", action: "updated", data: entry })
 		(ok entry)))
 
@@ -175,28 +172,32 @@
 
 (define-private (is-ok-entry (entry (response {
 		feed-id: uint,
-		price: int,
-		exponent: int,
-		confidence: uint,
-		publish-time: uint,
-		channel: uint,
-		ema-price: (optional int),
-		ema-confidence: (optional uint),
-		best-bid: (optional int),
-		best-ask: (optional int),
+		record: {
+			price: int,
+			exponent: int,
+			confidence: uint,
+			publish-time: uint,
+			channel: uint,
+			ema-price: (optional int),
+			ema-confidence: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int),
+		},
 	} uint)))
 	(is-ok entry))
 
 (define-private (unwrap-entry (entry (response {
 		feed-id: uint,
-		price: int,
-		exponent: int,
-		confidence: uint,
-		publish-time: uint,
-		channel: uint,
-		ema-price: (optional int),
-		ema-confidence: (optional uint),
-		best-bid: (optional int),
-		best-ask: (optional int),
+		record: {
+			price: int,
+			exponent: int,
+			confidence: uint,
+			publish-time: uint,
+			channel: uint,
+			ema-price: (optional int),
+			ema-confidence: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int),
+		},
 	} uint)))
 	(unwrap-panic entry))
