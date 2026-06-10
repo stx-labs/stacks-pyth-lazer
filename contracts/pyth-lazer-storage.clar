@@ -1,24 +1,11 @@
 ;; Title: pyth-lazer-storage
 ;; Version: v1
 ;;
-;; Durable price store: feed-id (uint) -> price record.
-;; IMMUTABLE (PLAN 6.4): holds state only; tuned via the admin-settable
-;; `authorized-writer`. It doubles as the stable READ anchor: consumers read
-;; here directly, so its address must never move.
-;;
-;; Phase 3 (this contract):
-;;   - `prices` map (feed-id -> generous price record; optionals reserve the
-;;     fields the v1 decoder does not populate yet, decision #4 / PLAN 6.4)
-;;   - per-feed monotonic publish-time guard (rejects older/equal updates; this
-;;     is the self-protecting invariant and the replay defense, PLAN 6.4)
-;;   - `get-price` (raw) / `read-price-with-staleness-check` (reads the threshold
-;;     from governance and converts microseconds -> seconds, decision #3)
-;;   - `write` gated by the admin-settable `authorized-writer` (the active oracle)
-;;   - `print` events for chainhook consumers
-;;
-;; The `write` entry shape is FROZEN by immutability, so it already carries the
-;; deferred `(optional ...)` fields: a future decoder-v2 can populate them with
-;; no storage redeploy (PLAN 6.4). The v1 oracle passes `none` for those.
+;; Durable price store: `feed-id (uint) -> price record`, behind a per-feed
+;; monotonic publish-time guard (the replay defense, PLAN 6.4) and an admin-
+;; settable `authorized-writer`. IMMUTABLE (PLAN 6.4): holds state only. Also the
+;; stable READ anchor -- consumers call `get-price` /
+;; `read-price-with-staleness-check` here directly -- so its address must never move.
 
 ;;;; Constants
 
@@ -50,8 +37,9 @@
 
 ;; feed-id (uint, decision #2) -> generous price record. Core fields (price,
 ;; exponent, confidence, publish-time, channel) are populated by the v1 decoder;
-;; the trailing fields are reserved so this immutable schema never needs a shape
-;; change (decision #4 / PLAN 6.4). `publish-time` is microseconds (decision #3);
+;; the trailing optionals are reserved -- and the `write` entry carries them too --
+;; so a later decoder can populate them without reshaping this immutable schema
+;; (decision #4 / PLAN 6.4). `publish-time` is microseconds (decision #3);
 ;; `channel` is recorded, not enforced (PLAN 6.3).
 ;;
 ;; FIXME(pre-ship): the optional-vs-required split below is NOT verified against
@@ -100,12 +88,10 @@
 
 ;;;; Write API (authorized-writer only)
 
-;; Batch-write up to MAX_FEEDS feeds (one Lazer update yields <= 16). Each batch
-;; element is a {feed-id, record} pair: `record` is stored verbatim under the
-;; feed-id key, so the key never lives inside the value. Each element passes the
-;; monotonic guard independently; elements not strictly newer than what is stored
-;; are skipped (last-write-wins, partial success), mirroring the old bridge.
-;; Returns the pairs actually written.
+;; Batch-write up to 16 feeds. Each element is a {feed-id, record} pair stored
+;; verbatim under its key. The monotonic guard runs per element, so updates not
+;; strictly newer than what is stored are skipped (last-write-wins, partial
+;; success). Returns the number of feeds written.
 (define-public (write (batch (list 16 {
 		feed-id: uint,
 		record: {
@@ -122,12 +108,11 @@
 	})))
 	(begin
 		(asserts! (is-eq contract-caller (unwrap! (var-get authorized-writer) ERR_NO_AUTHORIZED_WRITER)) ERR_UNAUTHORIZED)
-		(ok (map unwrap-entry (filter is-ok-entry (map write-entry batch))))))
+		(ok (len (filter is-ok-entry (map write-entry batch))))))
 
 ;; Write one feed's record if its publish-time is strictly newer than the stored
-;; one. The record is stored as-is (it carries no feed-id -- that is the key), so
-;; no field-by-field rebuild is needed. The map-set (and event) only happen after
-;; the guard passes, so a rejected element leaves storage untouched.
+;; one (the record has no feed-id field -- that is the key). The map-set and event
+;; run only after the guard passes, so a rejected element leaves storage untouched.
 (define-private (write-entry (entry {
 		feed-id: uint,
 		record: {
@@ -168,8 +153,8 @@
 		(print { type: "authorized-writer", action: "updated", data: new-writer })
 		(ok true)))
 
-;;;; Fold/filter helpers for the batch write
-
+;; `filter` needs a named predicate; this just keeps the successful writes so
+;; `write` can count them.
 (define-private (is-ok-entry (entry (response {
 		feed-id: uint,
 		record: {
@@ -185,19 +170,3 @@
 		},
 	} uint)))
 	(is-ok entry))
-
-(define-private (unwrap-entry (entry (response {
-		feed-id: uint,
-		record: {
-			price: int,
-			exponent: int,
-			confidence: uint,
-			publish-time: uint,
-			channel: uint,
-			ema-price: (optional int),
-			ema-confidence: (optional uint),
-			best-bid: (optional int),
-			best-ask: (optional int),
-		},
-	} uint)))
-	(unwrap-panic entry))

@@ -3,8 +3,9 @@
 Clarity contracts that bring **Pyth Lazer** ("Pyth Pro") signed price feeds to the Stacks blockchain.
 This is the successor to [`stacks-pyth-bridge`](../stacks-pyth-bridge), which depends on Pythnet (deprecated) + Wormhole.
 
-> **Status: Phase 0 scaffold.** Contracts are documented skeletons; protocol logic lands in
-> Phases 1–6. The full design and rationale live in **[`PLAN.md`](./PLAN.md)**.
+> **Status: Phases 1–3 complete** (signature verification, payload parsing, storage).
+> Oracle + governance wiring (Phase 4), hardening (5), and deployment (6) remain.
+> The full design and rationale live in **[`PLAN.md`](./PLAN.md)**.
 
 ## How it works
 
@@ -19,7 +20,7 @@ This is a simpler architecture than [`stacks-pyth-bridge`](../stacks-pyth-bridge
 |---|---|---|
 | `pyth-lazer-traits` | immutable | Trait definitions |
 | `pyth-lazer-decoder-v1` | **swappable** | Parse message and verify signatures |
-| `pyth-lazer-storage` | immutable | Permanant storage for price data |
+| `pyth-lazer-storage` | immutable | Permanent storage for price data |
 | `pyth-lazer-oracle-v1` | thin / stable | Entry point for submitting feed updates |
 | `pyth-lazer-governance` | immutable | Protocol governance (admin, trusted signers, fee, stale threshold) |
 

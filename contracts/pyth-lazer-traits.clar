@@ -1,12 +1,12 @@
 ;; Title: pyth-lazer-traits
-;; Version: v1 (Phase 0 scaffold)
+;; Version: v1 (scaffold; traits defined in Phase 4)
 ;;
 ;; Trait definitions for the Stacks <> Pyth Lazer oracle. See PLAN.md section 5.
 ;; IMMUTABLE: once deployed, the trait shapes are fixed.
 ;;
-;; Phase 0 NOTE: the trait bodies are intentionally not defined yet. They are
-;; activated in Phase 1+ once the price-record schema is locked (PLAN 6.4,
-;; decision #4). The intended interface is sketched below for reference.
+;; NOTE: the trait bodies are not defined yet -- they land in Phase 4 with the
+;; oracle (which takes the decoder as a `<decoder-trait>` param, PLAN 6.4). The
+;; price-record schema they reference is now locked (Phase 3), sketched below.
 ;;
 ;;   - Feed ids are `uint` (decision #2).
 ;;   - Timestamps are stored in microseconds (decision #3).

@@ -1,6 +1,6 @@
 # Stacks ⇄ Pyth Lazer — Implementation Plan
 
-> Status: **Design locked (§6) — ready to scaffold (Phase 0)**
+> Status: **Phases 0–3 done; next is Phase 4 (oracle + governance wiring) — see §8.**
 > Goal: replace the Wormhole-based `stacks-pyth-bridge` (Pythnet pull oracle) with a
 > new set of Clarity contracts that consume **Pyth Lazer** ("Pyth Pro") signed price
 > updates, ahead of Pythnet being discontinued.

@@ -40,10 +40,10 @@
 	(list 16 { pubkey: (buff 33), expires-at: uint })
 	(list))
 
-;; Stale-price threshold, in SECONDS. Storage treats a stored price as fresh while
-;; `now - (publish-time / 1_000_000) <= threshold` (Lazer publish-time is in us;
-;; decision #3). Defaults mirror the old bridge: 2 hours on mainnet, ~5 years
-;; elsewhere, so simnet/testnet reads never go stale until an admin tightens it.
+;; Stale-price threshold, in SECONDS, read by `pyth-lazer-storage` for its read-side
+;; freshness check (storage converts Lazer's microsecond publish-time, decision #3).
+;; Defaults are deliberately loose so simnet/testnet reads never go stale until an
+;; admin tightens them.
 (define-data-var stale-price-threshold uint
 	(if is-in-mainnet u7200 u157680000)) ;; 2h (2*60*60) mainnet / ~5y (5*365*24*60*60) else
 

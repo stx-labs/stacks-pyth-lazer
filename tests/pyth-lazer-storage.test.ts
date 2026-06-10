@@ -101,7 +101,7 @@ describe("pyth-lazer-storage: write + read", () => {
     authorize(deployer);
     const e = { feedId: 1, price: 4_200_000_000n, exponent: -8n, confidence: 1_500_000n, publishTime: TS };
     const w = write([entry(e)]);
-    expect(w.result).toBeOk(Cl.list([entry(e)]));
+    expect(w.result).toBeOk(Cl.uint(1)); // count of feeds written
     expect(w.events).toHaveLength(1);
     expect(w.events[0].event).toBe("print_event");
 
@@ -117,25 +117,21 @@ describe("pyth-lazer-storage: monotonic publish-time guard", () => {
   it("accepts a strictly newer update and rejects older/equal ones", () => {
     authorize(deployer);
 
-    expect(write([entry({ feedId: 1, publishTime: 200n })]).result).toBeOk(
-      Cl.list([entry({ feedId: 1, publishTime: 200n })]),
-    );
+    expect(write([entry({ feedId: 1, publishTime: 200n })]).result).toBeOk(Cl.uint(1));
     expect(getPrice(1)).toBeOk(stored({ feedId: 1, publishTime: 200n }));
 
-    // older -> skipped (empty success list), stored value unchanged
+    // older -> skipped (0 written), stored value unchanged
     const older = write([entry({ feedId: 1, publishTime: 100n })]);
-    expect(older.result).toBeOk(Cl.list([]));
+    expect(older.result).toBeOk(Cl.uint(0));
     expect(older.events).toHaveLength(0); // no write -> no event
     expect(getPrice(1)).toBeOk(stored({ feedId: 1, publishTime: 200n }));
 
     // equal -> skipped too (strictly-newer guard)
-    expect(write([entry({ feedId: 1, publishTime: 200n })]).result).toBeOk(Cl.list([]));
+    expect(write([entry({ feedId: 1, publishTime: 200n })]).result).toBeOk(Cl.uint(0));
     expect(getPrice(1)).toBeOk(stored({ feedId: 1, publishTime: 200n }));
 
     // newer -> accepted
-    expect(write([entry({ feedId: 1, publishTime: 300n })]).result).toBeOk(
-      Cl.list([entry({ feedId: 1, publishTime: 300n })]),
-    );
+    expect(write([entry({ feedId: 1, publishTime: 300n })]).result).toBeOk(Cl.uint(1));
     expect(getPrice(1)).toBeOk(stored({ feedId: 1, publishTime: 300n }));
   });
 
@@ -148,7 +144,7 @@ describe("pyth-lazer-storage: monotonic publish-time guard", () => {
       entry({ feedId: 1, publishTime: 50n }),
       entry({ feedId: 2, publishTime: 150n }),
     ]);
-    expect(mixed.result).toBeOk(Cl.list([entry({ feedId: 2, publishTime: 150n })]));
+    expect(mixed.result).toBeOk(Cl.uint(1)); // only feed 2 written
     expect(mixed.events).toHaveLength(1);
 
     expect(getPrice(1)).toBeOk(stored({ feedId: 1, publishTime: 100n }));
