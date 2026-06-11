@@ -1,6 +1,6 @@
 # Stacks ⇄ Pyth Lazer — Implementation Plan
 
-> Status: **Phases 0–3 done; next is Phase 4 (oracle + governance wiring) — see §8.**
+> Status: **Phases 0–4 done; next is Phase 5 (hardening) — see §8.**
 > Goal: replace the Wormhole-based `stacks-pyth-bridge` (Pythnet pull oracle) with a
 > new set of Clarity contracts that consume **Pyth Lazer** ("Pyth Pro") signed price
 > updates, ahead of Pythnet being discontinued.
@@ -443,10 +443,24 @@ Each phase is independently reviewable/mergeable.
   governance's admin (single-admin, #1). Tested: writer auth (unset/non-admin/wrong-caller),
   write+read, not-found, monotonic guard (older/equal skipped, newer accepted), per-entry batch
   partial success, and staleness fresh/stale/not-found.
-- **Phase 4 — oracle + governance.** Wire the oracle entry points + fee, the rest of
-  immutable governance (admin + trusted-signer management/expiry #1; **stale threshold already
-  landed in Phase 3**; blessed decoder + fee remain), and the oracle's validation of the
-  `<decoder>` trait param against governance's blessed decoder (§6.4). No execution-plan.
+- **Phase 4 — oracle + governance. ✅ DONE.** `pyth-lazer-oracle-v1`:
+  `verify-and-update-price-feeds (update (buff 8192)) (decoder <decoder-trait>)` — asserts
+  `(contract-of decoder)` equals governance's blessed decoder (§6.4), dispatches the decoder,
+  folds the decoded feeds into storage records (threading the update's publish-time + channel,
+  and **enforcing** the required core fields the storage schema demands — the oracle is the
+  optional→required boundary the storage FIXME flagged), writes to storage, then charges the
+  per-update fee (default `u0`, routed to the admin). Added `decoder-trait` to
+  `pyth-lazer-traits` (public method — Clarity trait methods can't be read-only, so the
+  decoder's `decode-and-verify-price-feeds` flipped from read-only to public + `impl-trait`).
+  Governance gained the blessed `decoder` (optional, admin-set) and `fee` (default `u0`)
+  slices. No execution-plan; storage stays the read anchor (oracle exposes no reads). Tested:
+  happy path (single + multi feed), unblessed/wrong decoder, propagated untrusted-signer
+  failure, unauthorized-writer, missing-core-field enforcement, and fee charged / not-charged.
+  Bootstrap is a single required admin call (`set-trusted-signers`): the blessed decoder and
+  storage's authorized-writer **default to the v1 contracts** (a principal literal is an address
+  value, not a deploy-order edge — verified), so `set-decoder` / `set-authorized-writer` are
+  upgrade-time re-pointing calls, not bootstrap. _(Deferred: per-signer add/remove ergonomic over
+  `set-trusted-signers`.)_
 - **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests, gas/cost
   review, fuzz the parser against the Rust/JS SDK output, **validate byte order against a real
   Lazer `evm` fixture** (the open item from Phase 2), audit prep.

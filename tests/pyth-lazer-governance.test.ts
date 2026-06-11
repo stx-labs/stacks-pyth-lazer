@@ -82,3 +82,38 @@ describe("pyth-lazer-governance: stale-price threshold", () => {
     expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
 });
+
+describe("pyth-lazer-governance: blessed decoder", () => {
+  it("defaults to the v1 decoder", () => {
+    expect(simnet.callReadOnlyFn(GOV, "get-decoder", [], deployer).result)
+      .toBePrincipal(`${deployer}.pyth-lazer-decoder-v1`);
+  });
+
+  it("lets the admin re-point the decoder", () => {
+    const set = simnet.callPublicFn(GOV, "set-decoder", [Cl.principal(wallet1)], deployer);
+    expect(set.result).toBeOk(Cl.bool(true));
+    expect(simnet.callReadOnlyFn(GOV, "get-decoder", [], deployer).result).toBePrincipal(wallet1);
+  });
+
+  it("rejects a non-admin trying to set the decoder", () => {
+    const { result } = simnet.callPublicFn(GOV, "set-decoder", [Cl.principal(wallet1)], wallet1);
+    expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+});
+
+describe("pyth-lazer-governance: fee", () => {
+  it("defaults the fee to u0", () => {
+    expect(simnet.callReadOnlyFn(GOV, "get-fee", [], deployer).result).toBeUint(0n);
+  });
+
+  it("lets the admin set the fee", () => {
+    const set = simnet.callPublicFn(GOV, "set-fee", [Cl.uint(2500n)], deployer);
+    expect(set.result).toBeOk(Cl.bool(true));
+    expect(simnet.callReadOnlyFn(GOV, "get-fee", [], deployer).result).toBeUint(2500n);
+  });
+
+  it("rejects a non-admin trying to set the fee", () => {
+    const { result } = simnet.callPublicFn(GOV, "set-fee", [Cl.uint(2500n)], wallet1);
+    expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+});

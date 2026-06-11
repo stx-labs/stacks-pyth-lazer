@@ -20,6 +20,9 @@
 ;; CLARITY6 (SIP-43): variadic `concat` would flatten any multi-part buffer
 ;;   assembly - minor here, the decoder is slice/parse-dominant (PLAN 4.1).
 
+;; Implements the swappable decoder interface the oracle dispatches (PLAN 6.4).
+(impl-trait .pyth-lazer-traits.decoder-trait)
+
 ;;;; Constants
 
 ;; -- EVM envelope (PLAN 3.2) --
@@ -72,7 +75,9 @@
 (define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; property type > MAX_PROPERTY_TYPE
 (define-constant ERR_TOO_MANY_PROPS (err u2206))    ;; feed declares more properties than exist
 
-;;;; Public (read-only) API
+;;;; Verification + decode entry points
+;; (`recover-signer` / `verify-update` are read-only; `decode-and-verify-price-feeds`
+;; is public so it can back the decoder-trait -- see its comment.)
 
 ;; Parse the EVM envelope and recover the signer of the payload.
 ;; Performs no trust check (see `verify-update`).
@@ -108,7 +113,10 @@
 
 ;; Verify the signature/signer, then parse the Lazer payload into price feeds.
 ;; Returns the update timestamp (microseconds), channel, and per-feed records.
-(define-read-only (decode-and-verify-price-feeds (update (buff 8192)))
+;; PUBLIC (not read-only) so it satisfies `decoder-trait` for the oracle's dynamic
+;; dispatch -- Clarity trait methods cannot be read-only. It is still pure (no
+;; state writes), so off-chain callers can invoke it read-only.
+(define-public (decode-and-verify-price-feeds (update (buff 8192)))
 	(let ((verified (try! (verify-update update))))
 		(decode-payload (get payload verified))))
 

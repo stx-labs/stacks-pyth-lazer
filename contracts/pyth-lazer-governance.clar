@@ -6,10 +6,10 @@
 ;; decoder, which is what makes immutability safe.
 ;;
 ;; Phase 1 implements the trusted-signer slice (admin + signer list + setters).
-;; Phase 3 adds the stale-price threshold: `pyth-lazer-storage` reads it for its
-;; read-side staleness check (decision #3), so it lands with storage rather than
-;; in Phase 4. Phase 4 adds: blessed `decoder` principal and the fee value
-;; (default u0), plus per-signer set/remove ergonomics.
+;; Phase 3 adds the stale-price threshold (storage reads it for its staleness
+;; check, decision #3). Phase 4 adds the blessed `decoder` principal and the
+;; per-update `fee` (default u0). (A per-signer add/remove ergonomic over the
+;; list-replace `set-trusted-signers` remains a future nicety, PLAN 7.)
 ;;
 ;; TODO(governance): v1 uses a single `contract-admin` principal, defaulting to the deployer.
 ;; This mirrors Pyth's own reference contracts (single owner / top-authority). Options to
@@ -47,6 +47,16 @@
 (define-data-var stale-price-threshold uint
 	(if is-in-mainnet u7200 u157680000)) ;; 2h (2*60*60) mainnet / ~5y (5*365*24*60*60) else
 
+;; Blessed decoder: the principal the oracle accepts as its `<decoder>` trait param
+;; (PLAN 6.4). Defaults to the v1 decoder so no post-deploy wiring is needed -- a
+;; principal literal is just an address, so this is not a deploy-order dependency on
+;; the decoder (which calls back into governance). Re-point to a decoder-v2 to upgrade.
+(define-data-var decoder principal .pyth-lazer-decoder-v1)
+
+;; Per-update fee in microSTX, charged by the oracle to the relayer (decision #6).
+;; Default u0 (no fee). The oracle routes it to the admin principal.
+(define-data-var fee uint u0)
+
 ;;;; Read-only getters
 
 (define-read-only (get-admin)
@@ -57,6 +67,12 @@
 
 (define-read-only (get-stale-price-threshold)
 	(var-get stale-price-threshold))
+
+(define-read-only (get-decoder)
+	(var-get decoder))
+
+(define-read-only (get-fee)
+	(var-get fee))
 
 ;;;; Admin functions
 
@@ -84,4 +100,21 @@
 		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
 		(var-set stale-price-threshold seconds)
 		(print { type: "stale-price-threshold", action: "updated", data: seconds })
+		(ok true)))
+
+;; Bless a new decoder the oracle will accept (PLAN 6.4). Defaults to the v1
+;; decoder; call this to upgrade to a decoder-v2.
+(define-public (set-decoder (new-decoder principal))
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(var-set decoder new-decoder)
+		(print { type: "decoder", action: "updated", data: new-decoder })
+		(ok true)))
+
+;; Set the per-update fee (microSTX). Section 7: occasional admin tuning.
+(define-public (set-fee (new-fee uint))
+	(begin
+		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(var-set fee new-fee)
+		(print { type: "fee", action: "updated", data: new-fee })
 		(ok true)))

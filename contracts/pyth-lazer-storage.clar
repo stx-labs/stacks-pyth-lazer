@@ -12,8 +12,7 @@
 ;; Caller of `write` is not the authorized writer, or a setter caller is not the
 ;; governance admin.
 (define-constant ERR_UNAUTHORIZED (err u3001))
-;; `write` called before an authorized writer was configured (bootstrap, PLAN 7).
-(define-constant ERR_NO_AUTHORIZED_WRITER (err u3002))
+;; (u3002 retired: writer now has a default, so "no writer configured" is unreachable.)
 ;; No record stored for this feed-id.
 (define-constant ERR_PRICE_FEED_NOT_FOUND (err u3003))
 ;; Stored price is older than the governance staleness window.
@@ -29,11 +28,11 @@
 
 ;;;; Data vars / maps
 
-;; The single principal allowed to call `write` (the active oracle). `none` until
-;; the admin sets it post-deploy: kept out of the constructor so storage does not
-;; reference the oracle (which references storage) and create a deploy cycle.
-;; Re-pointed to a redeployed oracle via `set-authorized-writer` (PLAN 6.4, 7).
-(define-data-var authorized-writer (optional principal) none)
+;; The single principal allowed to call `write` -- the active oracle. Defaults to
+;; the v1 oracle so no post-deploy wiring is needed; a principal literal is just an
+;; address, so this is not a deploy-order cycle with the oracle (which calls back
+;; into storage). Re-point to a redeployed oracle via `set-authorized-writer` (PLAN 6.4, 7).
+(define-data-var authorized-writer principal .pyth-lazer-oracle-v1)
 
 ;; feed-id (uint, decision #2) -> generous price record. Core fields (price,
 ;; exponent, confidence, publish-time, channel) are populated by the v1 decoder;
@@ -107,7 +106,7 @@
 		},
 	})))
 	(begin
-		(asserts! (is-eq contract-caller (unwrap! (var-get authorized-writer) ERR_NO_AUTHORIZED_WRITER)) ERR_UNAUTHORIZED)
+		(asserts! (is-eq contract-caller (var-get authorized-writer)) ERR_UNAUTHORIZED)
 		(ok (len (filter is-ok-entry (map write-entry batch))))))
 
 ;; Write one feed's record if its publish-time is strictly newer than the stored
@@ -149,7 +148,7 @@
 (define-public (set-authorized-writer (new-writer principal))
 	(begin
 		(asserts! (is-eq tx-sender (contract-call? .pyth-lazer-governance get-admin)) ERR_UNAUTHORIZED)
-		(var-set authorized-writer (some new-writer))
+		(var-set authorized-writer new-writer)
 		(print { type: "authorized-writer", action: "updated", data: new-writer })
 		(ok true)))
 

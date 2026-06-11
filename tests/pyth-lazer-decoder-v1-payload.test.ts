@@ -31,7 +31,9 @@ function trust() {
 
 function decode(payload: Uint8Array) {
   const update = buildEvmUpdate(payload);
-  return simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer)
+  // decode-and-verify-price-feeds is public (it backs the decoder-trait), so call
+  // it as a tx; it is pure, so the result is identical to a read-only eval.
+  return simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer)
     .result;
 }
 

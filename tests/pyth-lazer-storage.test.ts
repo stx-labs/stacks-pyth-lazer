@@ -10,7 +10,6 @@ const GOV = "pyth-lazer-governance";
 
 // Storage error codes (PLAN: storage uses the u3xxx range).
 const ERR_UNAUTHORIZED = 3001;
-const ERR_NO_AUTHORIZED_WRITER = 3002;
 const ERR_PRICE_FEED_NOT_FOUND = 3003;
 const ERR_STALE_PRICE = 3004;
 
@@ -65,17 +64,12 @@ const getPrice = (feedId: number) =>
   simnet.callReadOnlyFn(STORAGE, "get-price", [Cl.uint(feedId)], deployer).result;
 
 describe("pyth-lazer-storage: authorized-writer", () => {
-  it("has no authorized writer until the admin sets one", () => {
+  it("defaults the authorized writer to the v1 oracle", () => {
     const { result } = simnet.callReadOnlyFn(STORAGE, "get-authorized-writer", [], deployer);
-    expect(result).toBeNone();
+    expect(result).toBePrincipal(`${deployer}.pyth-lazer-oracle-v1`);
   });
 
-  it("rejects a write before an authorized writer is configured", () => {
-    const { result } = write([entry({ feedId: 1, publishTime: TS })]);
-    expect(result).toBeErr(Cl.uint(ERR_NO_AUTHORIZED_WRITER));
-  });
-
-  it("lets only the governance admin set the authorized writer", () => {
+  it("lets only the governance admin re-point the authorized writer", () => {
     const nonAdmin = simnet.callPublicFn(
       STORAGE,
       "set-authorized-writer",
@@ -86,7 +80,7 @@ describe("pyth-lazer-storage: authorized-writer", () => {
 
     expect(authorize(wallet1).result).toBeOk(Cl.bool(true));
     const { result } = simnet.callReadOnlyFn(STORAGE, "get-authorized-writer", [], deployer);
-    expect(result).toBeSome(Cl.principal(wallet1));
+    expect(result).toBePrincipal(wallet1);
   });
 
   it("rejects a write from a caller that is not the authorized writer", () => {
