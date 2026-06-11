@@ -10,9 +10,9 @@ This is the successor to [`stacks-pyth-bridge`](../stacks-pyth-bridge), which de
 ## How it works
 
 A relayer fetches a Lazer update in the **`evm`** format (one secp256k1 ECDSA signature over `keccak256(payload)`) and submits it on-chain.
-The oracle recovers the signer, checks it against the trusted-signer set, parses the feeds, and stores the latest price per feed.
+The oracle verifies the update through the decoder — signer recovery, trusted-signer check, and feed parsing — then stores the latest price per feed.
 
-This is a simpler architecture than [`stacks-pyth-bridge`](../stacks-pyth-bridge): No Wormhole, no Merkle proofs
+This is a simpler architecture than [`stacks-pyth-bridge`](../stacks-pyth-bridge): no Wormhole, no Merkle proofs.
 
 ## Contracts
 

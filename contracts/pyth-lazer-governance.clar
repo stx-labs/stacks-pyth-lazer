@@ -8,8 +8,7 @@
 ;; Phase 1 implements the trusted-signer slice (admin + signer list + setters).
 ;; Phase 3 adds the stale-price threshold (storage reads it for its staleness
 ;; check, decision #3). Phase 4 adds the blessed `decoder` principal and the
-;; per-update `fee` (default u0). (A per-signer add/remove ergonomic over the
-;; list-replace `set-trusted-signers` remains a future nicety, PLAN 7.)
+;; per-update `fee` (default u0).
 ;;
 ;; TODO(governance): v1 uses a single `contract-admin` principal, defaulting to the deployer.
 ;; This mirrors Pyth's own reference contracts (single owner / top-authority). Options to
@@ -76,9 +75,9 @@
 
 ;;;; Admin functions
 
-;; Replace the full trusted-signer set. Phase 4 will add per-signer
-;; add/update/remove ergonomics (set-trusted-signer pubkey expires-at, with
-;; expires-at = u0 meaning remove), per PLAN section 7.
+;; Replace the full trusted-signer set (pass the new full list to add or remove).
+;; A per-signer setter (set-trusted-signer pubkey expires-at, expires-at = u0 to
+;; remove) is a future ergonomic nicety, not yet implemented (PLAN 7).
 (define-public (set-trusted-signers
 		(signers (list 16 { pubkey: (buff 33), expires-at: uint })))
 	(begin

@@ -63,7 +63,7 @@
 	best-ask: (optional int),
 })
 
-;;;; Read-only API (storage is the stable read anchor; consumers call directly)
+;;;; Read-only API
 
 (define-read-only (get-authorized-writer)
 	(var-get authorized-writer))
@@ -143,8 +143,8 @@
 
 ;;;; Admin (governance admin only -- single admin principal, decision #1)
 
-;; Point storage at the active oracle (the only contract allowed to `write`).
-;; Gated by governance's admin so the whole system shares one admin (decision #1).
+;; Re-point storage at a redeployed oracle. Gated by governance's admin so the
+;; whole system shares one admin (decision #1).
 (define-public (set-authorized-writer (new-writer principal))
 	(begin
 		(asserts! (is-eq tx-sender (contract-call? .pyth-lazer-governance get-admin)) ERR_UNAUTHORIZED)
