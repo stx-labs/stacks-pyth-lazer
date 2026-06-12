@@ -9,9 +9,12 @@
 ;; Phase 1 (DONE): signature verification (PLAN 3.2) + trusted-signer check.
 ;; Phase 2 (DONE): Lazer payload/feed parser (PLAN 3.3-3.4) -> price records,
 ;;   composed by `decode-and-verify-price-feeds`.
-;;   NOTE: byte order follows the EVM PythLazerLib (big-endian). Synthetic tests
-;;   prove the parser is self-consistent; a REAL Lazer `evm` fixture is still
-;;   needed to confirm endianness/layout against production (PLAN 9, 10).
+;;   NOTE: byte order follows the EVM PythLazerLib (big-endian). Confirmed against
+;;   a REAL upstream fixture (pyth-crosschain PythLazer.t.sol v0.1.1) in
+;;   tests/pyth-lazer-golden-fixture.test.ts -- envelope + secp256k1 recovery +
+;;   payload layout all match. That vector is single-feed and carries no
+;;   confidence, so confidence(u64) width and multi-feed real data are still only
+;;   covered by the self-consistent synthetic tests (PLAN 9, 10).
 ;;
 ;; CLARITY6 (SIP-43): `ed25519-verify` would let this decoder also accept Lazer's
 ;;   `solana` (ed25519) format; v1 is secp256k1/`evm`-only (PLAN 3.1, 4.1).

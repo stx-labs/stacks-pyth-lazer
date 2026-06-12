@@ -427,10 +427,13 @@ Each phase is independently reviewable/mergeable.
   `offset == len(payload)` exact-consumption check. `MAX_FEEDS = 16`. Tested (synthetic
   payloads): single/multi feed, negative price, skipped non-persisted props, omitted props →
   `none`, wrong magic, too-many-feeds, unknown property type, payload overlay.
-  _**OPEN (carry to Phase 5): real-fixture endianness.** Synthetic fixtures prove the parser is
-  self-consistent but cannot catch a big-endian/little-endian mismatch with production Lazer
-  data. The parser follows the EVM `PythLazerLib` (big-endian); confirm against a real `evm`
-  update from the Lazer API before mainnet._
+  _**Real-fixture endianness — DONE (Phase 5).** Validated against a real upstream `evm` vector
+  (`pyth-crosschain` `PythLazer.t.sol` v0.1.1, commit `fca047c`) in
+  `tests/pyth-lazer-golden-fixture.test.ts`: envelope layout, on-chain secp256k1 recovery, and
+  the big-endian payload/feed parse all match Pyth's own asserted values. That vector is
+  single-feed and omits confidence, so confidence(u64) width and multi-feed real data remain
+  covered only by the self-consistent synthetic tests; a live-subscription fixture is still
+  wanted to finalize the storage optional/required split (Phase 5 below)._
 - **Phase 3 — storage. ✅ DONE.** `pyth-lazer-storage`: `prices` map (`uint` feed-id → generous
   record, with the deferred properties reserved as `(optional …)` so the immutable `write`
   signature never has to change — #4 / §6.4); a strictly-monotonic per-feed publish-time guard
@@ -462,8 +465,15 @@ Each phase is independently reviewable/mergeable.
   upgrade-time re-pointing calls, not bootstrap. _(Deferred: per-signer add/remove ergonomic over
   `set-trusted-signers`.)_
 - **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests, gas/cost
-  review, fuzz the parser against the Rust/JS SDK output, **validate byte order against a real
-  Lazer `evm` fixture** (the open item from Phase 2), audit prep.
+  review, fuzz the parser against the Rust/JS SDK output, audit prep.
+  - ✅ **Byte order validated against a real Lazer `evm` fixture** (the open item from Phase 2):
+    `tests/pyth-lazer-golden-fixture.test.ts` decodes an upstream `PythLazer.t.sol` v0.1.1 vector
+    end-to-end (envelope + secp256k1 recovery + big-endian payload) to Pyth's own asserted values.
+  - ⬜ **Live-subscription fixture** to finalize the storage optional/required split (the storage
+    `FIXME(pre-ship)`): the upstream vector is a staging signer's single feed with no confidence/ema,
+    so it cannot tell us which properties *our* production subscription guarantees. Generate one
+    with `@pythnetwork/pyth-lazer-sdk` (needs an access token) and confirm the guaranteed property set.
+  - ⬜ Confidence(u64) width + multi-feed coverage on real bytes (the upstream vector covers neither).
 - **Phase 6 — deployment.** Testnet deploy + plan, a worked consumer example (port the
   `example/cbtc` integration), mainnet deployment plan, README with addresses.
 
