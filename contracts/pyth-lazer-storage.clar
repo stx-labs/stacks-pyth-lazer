@@ -19,9 +19,8 @@
 (define-constant ERR_STALE_PRICE (err u3004))
 ;; Could not read wall-clock time from the chain.
 (define-constant ERR_NO_BLOCK_TIME (err u3005))
-;; A newer-or-equal publish-time is already stored (per-entry; filtered out of a
-;; batch rather than failing it).
-(define-constant ERR_NEWER_PRICE_AVAILABLE (err u3006))
+;; (u3006 retired: a not-newer entry is now skipped silently -- counted as 0
+;; writes, never surfaced as an error -- so the monotonic guard needs no code.)
 
 ;; Lazer publish-time is microseconds; staleness compares in seconds (decision #3).
 (define-constant MICROS_PER_SECOND u1000000)
@@ -90,7 +89,7 @@
 ;; Batch-write up to 16 feeds. Each element is a {feed-id, record} pair stored
 ;; verbatim under its key. The monotonic guard runs per element, so updates not
 ;; strictly newer than what is stored are skipped (last-write-wins, partial
-;; success). Returns the number of feeds written.
+;; success). Returns the number of feeds actually written.
 (define-public (write (batch (list 16 {
 		feed-id: uint,
 		record: {
@@ -107,31 +106,36 @@
 	})))
 	(begin
 		(asserts! (is-eq contract-caller (var-get authorized-writer)) ERR_UNAUTHORIZED)
-		(ok (len (filter is-ok-entry (map write-entry batch))))))
+		(ok (fold write-entry batch u0))))
 
-;; Write one feed's record if its publish-time is strictly newer than the stored
-;; one (the record has no feed-id field -- that is the key). The map-set and event
-;; run only after the guard passes, so a rejected element leaves storage untouched.
-(define-private (write-entry (entry {
-		feed-id: uint,
-		record: {
-			price: int,
-			exponent: int,
-			confidence: uint,
-			publish-time: uint,
-			channel: uint,
-			ema-price: (optional int),
-			ema-confidence: (optional uint),
-			best-bid: (optional int),
-			best-ask: (optional int),
-		},
-	}))
+;; Fold step: write one feed's record and count it, but only if its publish-time
+;; is strictly newer than the stored one (the record has no feed-id field -- that
+;; is the key). A not-newer entry is skipped, leaving storage and the count
+;; untouched, so a batch mixing fresh and stale updates is a partial success.
+(define-private (write-entry
+		(entry {
+			feed-id: uint,
+			record: {
+				price: int,
+				exponent: int,
+				confidence: uint,
+				publish-time: uint,
+				channel: uint,
+				ema-price: (optional int),
+				ema-confidence: (optional uint),
+				best-bid: (optional int),
+				best-ask: (optional int),
+			},
+		})
+		(written uint))
 	(let ((feed-id (get feed-id entry))
 			(record (get record entry)))
-		(asserts! (is-update-newer feed-id (get publish-time record)) ERR_NEWER_PRICE_AVAILABLE)
-		(map-set prices feed-id record)
-		(print { type: "price-feed", action: "updated", data: entry })
-		(ok entry)))
+		(if (is-update-newer feed-id (get publish-time record))
+			(begin
+				(map-set prices feed-id record)
+				(print { type: "price-feed", action: "updated", data: entry })
+				(+ written u1))
+			written)))
 
 ;; The replay/monotonic guard: an update is accepted only when its publish-time is
 ;; strictly newer than the stored one. A feed with no stored record accepts any
@@ -151,21 +155,3 @@
 		(var-set authorized-writer new-writer)
 		(print { type: "authorized-writer", action: "updated", data: new-writer })
 		(ok true)))
-
-;; `filter` needs a named predicate; this just keeps the successful writes so
-;; `write` can count them.
-(define-private (is-ok-entry (entry (response {
-		feed-id: uint,
-		record: {
-			price: int,
-			exponent: int,
-			confidence: uint,
-			publish-time: uint,
-			channel: uint,
-			ema-price: (optional int),
-			ema-confidence: (optional uint),
-			best-bid: (optional int),
-			best-ask: (optional int),
-		},
-	} uint)))
-	(is-ok entry))
