@@ -464,8 +464,12 @@ Each phase is independently reviewable/mergeable.
   value, not a deploy-order edge — verified), so `set-decoder` / `set-authorized-writer` are
   upgrade-time re-pointing calls, not bootstrap. _(Deferred: per-signer add/remove ergonomic over
   `set-trusted-signers`.)_
-- **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests, gas/cost
-  review, fuzz the parser against the Rust/JS SDK output, audit prep.
+- **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests,
+  fuzz the parser against the Rust/JS SDK output, audit prep.
+  - ✅ **Cost/gas review** ([`docs/cost-review.md`](./docs/cost-review.md)): a max 16-feed update is
+    0.64% of block runtime (the binding dimension), ~156 such updates/block; all other dimensions
+    <0.4%. Parser dominates and scales ~linearly per feed (~1.9M runtime/feed); secp256k1 recovery
+    is negligible (~39K). No optimization required.
   - ✅ **Byte order validated against a real Lazer `evm` fixture** (the open item from Phase 2):
     `tests/pyth-lazer-golden-fixture.test.ts` decodes an upstream `PythLazer.t.sol` v0.1.1 vector
     end-to-end (envelope + secp256k1 recovery + big-endian payload) to Pyth's own asserted values.
