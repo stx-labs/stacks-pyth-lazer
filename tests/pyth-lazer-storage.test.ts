@@ -20,25 +20,30 @@ type EntryOpts = {
   feedId: number;
   price?: bigint;
   exponent?: bigint;
+  publisherCount?: bigint;
   confidence?: bigint;
   publishTime: bigint;
   channel?: number;
 };
 
-// The stored record: core fields the v1 decoder populates + the reserved
-// optionals (always `none` for v1, matching what the oracle will pass). This is
-// exactly what `get-price` returns and what is stored under the feed-id key.
+// The stored record (finalized schema): required price/exponent/publisher-count,
+// optional confidence + best-bid/ask + ema-* + feed-update-timestamp. Storage keeps
+// whatever the writer passes, so the same builder is used for the `write` input and
+// the `get-price` expectation. `confidence` defaults to `none` here (omitted) so the
+// guard tests that don't set it round-trip; tests that set it get `(some ...)`.
 const stored = (o: EntryOpts) =>
   Cl.tuple({
     price: Cl.int(o.price ?? 0n),
     exponent: Cl.int(o.exponent ?? -8n),
-    confidence: Cl.uint(o.confidence ?? 0n),
-    "publish-time": Cl.uint(o.publishTime),
-    channel: Cl.uint(o.channel ?? REAL_TIME),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
+    "publisher-count": Cl.uint(o.publisherCount ?? 0n),
+    confidence: o.confidence === undefined ? Cl.none() : Cl.some(Cl.uint(o.confidence)),
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
+    "ema-price": Cl.none(),
+    "ema-confidence": Cl.none(),
+    "feed-update-timestamp": Cl.none(),
+    "publish-time": Cl.uint(o.publishTime),
+    channel: Cl.uint(o.channel ?? REAL_TIME),
   });
 
 // A `write` batch element: a {feed-id, record} pair. `record` is the value stored

@@ -430,10 +430,9 @@ Each phase is independently reviewable/mergeable.
   _**Real-fixture endianness — DONE (Phase 5).** Validated against a real upstream `evm` vector
   (`pyth-crosschain` `PythLazer.t.sol` v0.1.1, commit `fca047c`) in
   `tests/pyth-lazer-golden-fixture.test.ts`: envelope layout, on-chain secp256k1 recovery, and
-  the big-endian payload/feed parse all match Pyth's own asserted values. That vector is
-  single-feed and omits confidence, so confidence(u64) width and multi-feed real data remain
-  covered only by the self-consistent synthetic tests; a live-subscription fixture is still
-  wanted to finalize the storage optional/required split (Phase 5 below)._
+  the big-endian payload/feed parse all match Pyth's own asserted values. A second, live-captured
+  3-feed production vector now also covers confidence(u64) + multi-feed on real bytes, and finalized
+  the storage optional/required split (Phase 5 below)._
 - **Phase 3 — storage. ✅ DONE.** `pyth-lazer-storage`: `prices` map (`uint` feed-id → generous
   record, with the deferred properties reserved as `(optional …)` so the immutable `write`
   signature never has to change — #4 / §6.4); a strictly-monotonic per-feed publish-time guard
@@ -473,11 +472,20 @@ Each phase is independently reviewable/mergeable.
   - ✅ **Byte order validated against a real Lazer `evm` fixture** (the open item from Phase 2):
     `tests/pyth-lazer-golden-fixture.test.ts` decodes an upstream `PythLazer.t.sol` v0.1.1 vector
     end-to-end (envelope + secp256k1 recovery + big-endian payload) to Pyth's own asserted values.
-  - ⬜ **Live-subscription fixture** to finalize the storage optional/required split (the storage
-    `FIXME(pre-ship)`): the upstream vector is a staging signer's single feed with no confidence/ema,
-    so it cannot tell us which properties *our* production subscription guarantees. Generate one
-    with `@pythnetwork/pyth-lazer-sdk` (needs an access token) and confirm the guaranteed property set.
-  - ⬜ Confidence(u64) width + multi-feed coverage on real bytes (the upstream vector covers neither).
+  - ✅ **Storage schema finalized** (resolves the storage `DO NOT SHIP` FIXME). Live BTC/ETH/SOL
+    `evm` updates captured via `scripts/gen-lazer-fixture.mjs` + `pyth-lazer-protocol`'s
+    `AggregatedPriceFeedData` set the optional/required split: REQUIRED `price` (oracle SKIPS a
+    price-less feed -- partial success -- rather than rejecting), `exponent`, `publisher-count`
+    (the two protocol non-`Option` fields); OPTIONAL `confidence`, `best-bid`, `best-ask`, `ema-*`,
+    `feed-update-timestamp`. Storage stays permissive (immutable); "required" lives in the
+    redeployable oracle. The immutable trait mirrors the full field vocabulary.
+  - ✅ **Confidence(u64) width + multi-feed on real bytes**: a real 3-feed production update
+    (`tests/fixtures/lazer/captured-updates.json`) is a second golden vector in
+    `tests/pyth-lazer-golden-fixture.test.ts`, decoding to the SDK's own values.
+  - Production trusted signer observed: compressed pubkey
+    `0x03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b` (it rotates via Pyth DAO --
+    re-confirm at deploy, PLAN 10). NOTE: re-run the cost review -- the decoder now persists three
+    more properties per feed (best-bid/ask + publisher-count), so `docs/cost-review.md` is stale.
 - **Phase 6 — deployment.** Testnet deploy + plan, a worked consumer example (port the
   `example/cbtc` integration), mainnet deployment plan, README with addresses.
 

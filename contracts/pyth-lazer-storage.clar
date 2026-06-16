@@ -33,33 +33,32 @@
 ;; into storage). Re-point to a redeployed oracle via `set-authorized-writer` (PLAN 6.4, 7).
 (define-data-var authorized-writer principal .pyth-lazer-oracle-v1)
 
-;; feed-id (uint, decision #2) -> generous price record. Core fields (price,
-;; exponent, confidence, publish-time, channel) are populated by the v1 decoder;
-;; the trailing optionals are reserved -- and the `write` entry carries them too --
-;; so a later decoder can populate them without reshaping this immutable schema
-;; (decision #4 / PLAN 6.4). `publish-time` is microseconds (decision #3);
-;; `channel` is recorded, not enforced (PLAN 6.3).
-;;
-;; FIXME(pre-ship): the optional-vs-required split below is NOT verified against
-;; the live Lazer API/SDK. Lazer properties are selected per-subscription (PLAN
-;; 3.4), so at the protocol level any property may be absent -- which is why these
-;; are `(optional ...)`. BUT if Pyth GUARANTEES a property is always present in our
-;; subscription's updates, it must become a REQUIRED field here (drop the optional).
-;; Conversely, the "required" core fields above assume price/exponent/confidence are
-;; always present -- the oracle must ENFORCE that (reject updates missing them),
-;; which is not yet implemented. Confirm the guaranteed property set against a real
-;; `evm` fixture and finalize this split before mainnet (PLAN 10 / Phase 5).
-;; DO NOT SHIP as-is.
+;; feed-id (uint, decision #2) -> price record. The optional/required split is
+;; finalized (Phase 5) against `pyth-lazer-protocol`'s AggregatedPriceFeedData and
+;; confirmed on live BTC/ETH/SOL `evm` updates (tests/fixtures/lazer + golden tests):
+;;   - REQUIRED: `exponent` and `publisher-count` are non-optional in the protocol
+;;     struct (always present). `price` is protocol-optional, but we require it here
+;;     -- a record with no price is useless -- so the ORACLE skips a price-less feed
+;;     (partial success) rather than rejecting the batch. `publish-time` / `channel`
+;;     are supplied by the oracle (decision #3 / 6.3): `publish-time` is the update
+;;     timestamp (microseconds), `channel` is recorded, not enforced.
+;;   - OPTIONAL (protocol `Option<...>`): `confidence`, `best-bid`, `best-ask`,
+;;     `ema-price`, `ema-confidence`, `feed-update-timestamp`. The v1 decoder fills
+;;     confidence / best-bid / best-ask; ema-* and feed-update-timestamp are reserved
+;;     `none` (not in the v1 subscription) so a later decoder can populate them
+;;     without reshaping this IMMUTABLE schema (decision #4 / PLAN 6.4).
 (define-map prices uint {
 	price: int,
 	exponent: int,
-	confidence: uint,
-	publish-time: uint,
-	channel: uint,
-	ema-price: (optional int),
-	ema-confidence: (optional uint),
+	publisher-count: uint,
+	confidence: (optional uint),
 	best-bid: (optional int),
 	best-ask: (optional int),
+	ema-price: (optional int),
+	ema-confidence: (optional uint),
+	feed-update-timestamp: (optional uint),
+	publish-time: uint,
+	channel: uint,
 })
 
 ;;;; Read-only API
@@ -95,13 +94,15 @@
 		record: {
 			price: int,
 			exponent: int,
-			confidence: uint,
-			publish-time: uint,
-			channel: uint,
-			ema-price: (optional int),
-			ema-confidence: (optional uint),
+			publisher-count: uint,
+			confidence: (optional uint),
 			best-bid: (optional int),
 			best-ask: (optional int),
+			ema-price: (optional int),
+			ema-confidence: (optional uint),
+			feed-update-timestamp: (optional uint),
+			publish-time: uint,
+			channel: uint,
 		},
 	})))
 	(begin
@@ -118,13 +119,15 @@
 			record: {
 				price: int,
 				exponent: int,
-				confidence: uint,
-				publish-time: uint,
-				channel: uint,
-				ema-price: (optional int),
-				ema-confidence: (optional uint),
+				publisher-count: uint,
+				confidence: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
+				ema-price: (optional int),
+				ema-confidence: (optional uint),
+				feed-update-timestamp: (optional uint),
+				publish-time: uint,
+				channel: uint,
 			},
 		})
 		(written uint))

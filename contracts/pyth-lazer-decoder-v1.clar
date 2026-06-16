@@ -47,11 +47,16 @@
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property type tags we persist in v1 (PLAN decision #4). All other property
-;; types are valid and skipped (the cursor still advances by their width).
-(define-constant PROP_PRICE u0)       ;; int64
-(define-constant PROP_EXPONENT u4)    ;; int16
-(define-constant PROP_CONFIDENCE u5)  ;; uint64
+;; Property type tags the v1 decoder persists (PLAN decision #4). Other valid types
+;; are skipped (the cursor still advances by their width). The ema-* and
+;; feed-update-timestamp storage fields are NOT in the v1 subscription, so they are
+;; left `none` here; a later decoder can populate them (PLAN 6.4).
+(define-constant PROP_PRICE u0)            ;; int64
+(define-constant PROP_BEST_BID u1)         ;; int64
+(define-constant PROP_BEST_ASK u2)         ;; int64
+(define-constant PROP_PUBLISHER_COUNT u3)  ;; uint16
+(define-constant PROP_EXPONENT u4)         ;; int16
+(define-constant PROP_CONFIDENCE u5)       ;; uint64
 (define-constant MAX_PROPERTY_TYPE u12)
 
 ;; Max feeds parsed per update; updates declaring more are rejected. Bump by
@@ -127,8 +132,8 @@
 
 ;; Parse a verified Lazer payload: header + sequential feeds. Each feed lists a
 ;; subset of properties (TLV: type byte + type-width value); we persist
-;; price/exponent/confidence and skip the rest. A final exact-length check
-;; guarantees every property width was honored.
+;; price/exponent/confidence/publisher-count/best-bid/best-ask and skip the rest.
+;; A final exact-length check guarantees every property width was honored.
 (define-read-only (decode-payload (payload (buff 8192)))
 	(begin
 		(asserts! (>= (len payload) FEEDS_OFFSET) ERR_INVALID_FEED_DATA)
@@ -154,7 +159,10 @@
 (define-private (parse-feed-slot
 		(slot uint)
 		(acc (response { bytes: (buff 8192), offset: uint, remaining: uint,
-			feeds: (list 16 { feed-id: uint, price: (optional int), exponent: (optional int), confidence: (optional uint) }) } uint)))
+			feeds: (list 16 { feed-id: uint, price: (optional int), exponent: (optional int),
+				confidence: (optional uint), publisher-count: (optional uint),
+				best-bid: (optional int), best-ask: (optional int), ema-price: (optional int),
+				ema-confidence: (optional uint), feed-update-timestamp: (optional uint) }) } uint)))
 	(match acc
 		state
 			(if (is-eq (get remaining state) u0)
@@ -174,12 +182,17 @@
 			(num-props (unwrap! (read-uint-be? bytes (+ offset u4) u1) ERR_INVALID_FEED_DATA))
 			(parsed (try! (fold parse-property PROPERTY_SLOTS
 				(ok { bytes: bytes, offset: (+ offset u5), remaining: num-props,
-					price: none, exponent: none, confidence: none })))))
+					price: none, exponent: none, confidence: none,
+					publisher-count: none, best-bid: none, best-ask: none })))))
 		;; Every declared property must have been consumed (num-props <= PROPERTY_SLOTS).
 		(asserts! (is-eq (get remaining parsed) u0) ERR_TOO_MANY_PROPS)
 		(ok {
 			feed: { feed-id: feed-id, price: (get price parsed),
-				exponent: (get exponent parsed), confidence: (get confidence parsed) },
+				exponent: (get exponent parsed), confidence: (get confidence parsed),
+				publisher-count: (get publisher-count parsed), best-bid: (get best-bid parsed),
+				best-ask: (get best-ask parsed),
+				;; Reserved storage fields the v1 subscription does not carry (PLAN 6.4).
+				ema-price: none, ema-confidence: none, feed-update-timestamp: none },
 			offset: (get offset parsed)
 		})))
 
@@ -189,7 +202,8 @@
 (define-private (parse-property
 		(slot uint)
 		(acc (response { bytes: (buff 8192), offset: uint, remaining: uint,
-			price: (optional int), exponent: (optional int), confidence: (optional uint) } uint)))
+			price: (optional int), exponent: (optional int), confidence: (optional uint),
+			publisher-count: (optional uint), best-bid: (optional int), best-ask: (optional int) } uint)))
 	(match acc
 		state
 			(if (is-eq (get remaining state) u0)
@@ -207,14 +221,21 @@
 (define-private (set-property-field
 		(ptype uint) (bytes (buff 8192)) (voffset uint)
 		(state { bytes: (buff 8192), offset: uint, remaining: uint,
-			price: (optional int), exponent: (optional int), confidence: (optional uint) }))
+			price: (optional int), exponent: (optional int), confidence: (optional uint),
+			publisher-count: (optional uint), best-bid: (optional int), best-ask: (optional int) }))
 	(if (is-eq ptype PROP_PRICE)
 		(ok (merge state { price: (some (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
-		(if (is-eq ptype PROP_EXPONENT)
-			(ok (merge state { exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
-			(if (is-eq ptype PROP_CONFIDENCE)
-				(ok (merge state { confidence: (some (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
-				(ok state)))))
+		(if (is-eq ptype PROP_BEST_BID)
+			(ok (merge state { best-bid: (some (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+			(if (is-eq ptype PROP_BEST_ASK)
+				(ok (merge state { best-ask: (some (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+				(if (is-eq ptype PROP_PUBLISHER_COUNT)
+					(ok (merge state { publisher-count: (some (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
+					(if (is-eq ptype PROP_EXPONENT)
+						(ok (merge state { exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
+						(if (is-eq ptype PROP_CONFIDENCE)
+							(ok (merge state { confidence: (some (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+							(ok state))))))))
 
 ;; Value width (bytes) per property type (PLAN 3.4 / PythLazerStructs):
 ;;   3 PublisherCount(u16), 4 Exponent(i16) -> 2 ; 9 MarketSession(u8) -> 1 ;

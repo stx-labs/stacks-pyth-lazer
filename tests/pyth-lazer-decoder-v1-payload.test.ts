@@ -37,12 +37,30 @@ function decode(payload: Uint8Array) {
     .result;
 }
 
-const feedRecord = (id: number, price: bigint | null, expo: bigint | null, conf: bigint | null) =>
+const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
+const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
+
+// The decoded per-feed shape. price/exponent/confidence/publisher-count/best-bid/
+// best-ask are populated when the property is present; ema-* and
+// feed-update-timestamp are always `none` (the v1 decoder does not persist them).
+const feedRecord = (
+  id: number,
+  price: bigint | null,
+  expo: bigint | null,
+  conf: bigint | null,
+  extra: { pub?: bigint | null; bid?: bigint | null; ask?: bigint | null } = {},
+) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
-    price: price === null ? Cl.none() : Cl.some(Cl.int(price)),
-    exponent: expo === null ? Cl.none() : Cl.some(Cl.int(expo)),
-    confidence: conf === null ? Cl.none() : Cl.some(Cl.uint(conf)),
+    price: optInt(price),
+    exponent: optInt(expo),
+    confidence: optUint(conf),
+    "publisher-count": optUint(extra.pub ?? null),
+    "best-bid": optInt(extra.bid ?? null),
+    "best-ask": optInt(extra.ask ?? null),
+    "ema-price": Cl.none(),
+    "ema-confidence": Cl.none(),
+    "feed-update-timestamp": Cl.none(),
   });
 
 const decoded = (channel: number, feeds: ReturnType<typeof feedRecord>[]) =>
@@ -74,7 +92,7 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     );
   });
 
-  it("skips non-persisted properties (best bid/ask) while parsing the rest", () => {
+  it("captures best-bid, best-ask, and publisher-count (out-of-order properties)", () => {
     trust();
     const payload = buildLazerPayload({
       timestamp: TS,
@@ -84,13 +102,27 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
         props: [
           [PROP.Price, 777n],
           [PROP.BestBidPrice, 776n],
+          [PROP.PublisherCount, 12n],
           [PROP.Exponent, -6n],
           [PROP.BestAskPrice, 778n],
           [PROP.Confidence, 3n],
         ],
       }],
     });
-    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(7, 777n, -6n, 3n)]));
+    expect(decode(payload)).toBeOk(
+      decoded(REAL_TIME, [feedRecord(7, 777n, -6n, 3n, { pub: 12n, bid: 776n, ask: 778n })]),
+    );
+  });
+
+  it("skips a property it does not persist (ema), parsing the rest", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.EmaPrice, 999n], [PROP.Exponent, -3n], [PROP.Confidence, 2n]] }],
+    });
+    // EmaPrice is advanced-over (its width is honored) and left `none`; the rest parse.
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 2n)]));
   });
 
   it("returns none for properties a feed omits", () => {

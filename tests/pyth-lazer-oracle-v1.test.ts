@@ -24,10 +24,10 @@ const REAL_TIME = 1;
 
 // Oracle error codes
 const ERR_INVALID_DECODER = 1001;
-const ERR_MISSING_PRICE = 1003;
 // Propagated from the decoder / storage
 const ERR_UNTRUSTED_SIGNER = 2105;
 const ERR_UNAUTHORIZED = 3001; // storage's write gate
+const ERR_PRICE_FEED_NOT_FOUND = 3003; // storage: no record for the feed
 
 const decoderRef = Cl.contractPrincipal(deployer, DECODER_NAME);
 
@@ -46,84 +46,88 @@ function makeUpdate(feeds: FeedSpec[], privKey?: Uint8Array) {
   return buildEvmUpdate(buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds }), privKey);
 }
 
+// A complete v1 feed: the oracle's required fields (price, exponent,
+// publisher-count) plus confidence. The oracle SKIPS any feed missing a required
+// field, so valid feeds must carry a publisher-count.
+const feed = (id: number, price: bigint, exponent: bigint, confidence: bigint, pub: bigint): FeedSpec => ({
+  id,
+  props: [[PROP.Price, price], [PROP.Exponent, exponent], [PROP.Confidence, confidence], [PROP.PublisherCount, pub]],
+});
+
 const submit = (update: Uint8Array, sender = wallet1) =>
   simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [Cl.buffer(update), decoderRef], sender);
 
 const getPrice = (feedId: number) =>
   simnet.callReadOnlyFn(STORAGE, "get-price", [Cl.uint(feedId)], deployer).result;
 
-// Expected stored record for a feed with the given core values (v1 optionals = none).
-const storedRecord = (price: bigint, exponent: bigint, confidence: bigint) =>
+// Expected stored record (finalized schema). The oracle requires
+// price/exponent/publisher-count and passes confidence through; best-bid/best-ask,
+// ema-*, and feed-update-timestamp are `none` for the updates these tests build.
+const storedRecord = (price: bigint, exponent: bigint, confidence: bigint, publisherCount: bigint) =>
   Cl.tuple({
     price: Cl.int(price),
     exponent: Cl.int(exponent),
-    confidence: Cl.uint(confidence),
-    "publish-time": Cl.uint(TS),
-    channel: Cl.uint(REAL_TIME),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
+    "publisher-count": Cl.uint(publisherCount),
+    confidence: Cl.some(Cl.uint(confidence)),
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
+    "ema-price": Cl.none(),
+    "ema-confidence": Cl.none(),
+    "feed-update-timestamp": Cl.none(),
+    "publish-time": Cl.uint(TS),
+    channel: Cl.uint(REAL_TIME),
   });
 
 describe("pyth-lazer-oracle-v1: verify-and-update-price-feeds", () => {
   it("verifies, decodes, and stores a single feed", () => {
     bootstrap();
-    const update = makeUpdate([
-      { id: 1, props: [[PROP.Price, 4_200_000_000n], [PROP.Exponent, -8n], [PROP.Confidence, 1_500_000n]] },
-    ]);
-    expect(submit(update).result).toBeOk(Cl.uint(1)); // 1 feed written
-    expect(getPrice(1)).toBeOk(storedRecord(4_200_000_000n, -8n, 1_500_000n));
+    expect(submit(makeUpdate([feed(1, 4_200_000_000n, -8n, 1_500_000n, 18n)])).result).toBeOk(Cl.uint(1));
+    expect(getPrice(1)).toBeOk(storedRecord(4_200_000_000n, -8n, 1_500_000n, 18n));
   });
 
   it("stores every feed in a multi-feed update", () => {
     bootstrap();
-    const update = makeUpdate([
-      { id: 1, props: [[PROP.Price, 100n], [PROP.Exponent, -2n], [PROP.Confidence, 5n]] },
-      { id: 2, props: [[PROP.Price, -50n], [PROP.Exponent, -4n], [PROP.Confidence, 9n]] },
-    ]);
-    expect(submit(update).result).toBeOk(Cl.uint(2));
-    expect(getPrice(1)).toBeOk(storedRecord(100n, -2n, 5n));
-    expect(getPrice(2)).toBeOk(storedRecord(-50n, -4n, 9n));
+    expect(submit(makeUpdate([feed(1, 100n, -2n, 5n, 7n), feed(2, -50n, -4n, 9n, 8n)])).result).toBeOk(Cl.uint(2));
+    expect(getPrice(1)).toBeOk(storedRecord(100n, -2n, 5n, 7n));
+    expect(getPrice(2)).toBeOk(storedRecord(-50n, -4n, 9n, 8n));
   });
 
   it("rejects a decoder that is not the blessed one", () => {
     // re-point the blessed decoder away from the one we pass
     simnet.callPublicFn(GOV, "set-decoder", [Cl.contractPrincipal(deployer, STORAGE)], deployer);
-    const update = makeUpdate([{ id: 1, props: [[PROP.Price, 1n], [PROP.Exponent, 0n], [PROP.Confidence, 1n]] }]);
-    expect(submit(update).result).toBeErr(Cl.uint(ERR_INVALID_DECODER));
+    expect(submit(makeUpdate([feed(1, 1n, 0n, 1n, 1n)])).result).toBeErr(Cl.uint(ERR_INVALID_DECODER));
   });
 
   it("propagates a decoder verification failure (untrusted signer)", () => {
     bootstrap();
-    const update = makeUpdate(
-      [{ id: 1, props: [[PROP.Price, 1n], [PROP.Exponent, 0n], [PROP.Confidence, 1n]] }],
-      OTHER_PRIVKEY,
-    );
-    expect(submit(update).result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
+    expect(submit(makeUpdate([feed(1, 1n, 0n, 1n, 1n)], OTHER_PRIVKEY)).result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 
   it("is rejected by storage when the writer is re-pointed away from the oracle", () => {
     bootstrap();
     // admin points storage's writer at someone else; the oracle can no longer write
     simnet.callPublicFn(STORAGE, "set-authorized-writer", [Cl.principal(wallet1)], deployer);
-    const update = makeUpdate([{ id: 1, props: [[PROP.Price, 1n], [PROP.Exponent, 0n], [PROP.Confidence, 1n]] }]);
-    expect(submit(update).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+    expect(submit(makeUpdate([feed(1, 1n, 0n, 1n, 1n)])).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
 
-  it("enforces the required core fields (rejects a feed with no price)", () => {
+  it("skips a feed with no price (partial success), storing the rest", () => {
     bootstrap();
-    // a feed carrying exponent + confidence but no price
-    const update = makeUpdate([{ id: 1, props: [[PROP.Exponent, -8n], [PROP.Confidence, 1n]] }]);
-    expect(submit(update).result).toBeErr(Cl.uint(ERR_MISSING_PRICE));
+    // feed 1 is complete; feed 2 has exponent + confidence + publisher-count but NO price.
+    const update = makeUpdate([
+      feed(1, 100n, -8n, 5n, 7n),
+      { id: 2, props: [[PROP.Exponent, -8n], [PROP.Confidence, 9n], [PROP.PublisherCount, 8n]] },
+    ]);
+    // only feed 1 is stored; the price-less feed 2 is dropped, not surfaced as an error.
+    expect(submit(update).result).toBeOk(Cl.uint(1));
+    expect(getPrice(1)).toBeOk(storedRecord(100n, -8n, 5n, 7n));
+    expect(getPrice(2)).toBeErr(Cl.uint(ERR_PRICE_FEED_NOT_FOUND));
   });
 
   it("charges the per-update fee from the relayer to the admin", () => {
     bootstrap();
     simnet.callPublicFn(GOV, "set-fee", [Cl.uint(1000n)], deployer);
-    const update = makeUpdate([{ id: 1, props: [[PROP.Price, 1n], [PROP.Exponent, 0n], [PROP.Confidence, 1n]] }]);
 
-    const res = submit(update, wallet1);
+    const res = submit(makeUpdate([feed(1, 1n, 0n, 1n, 5n)]), wallet1);
     expect(res.result).toBeOk(Cl.uint(1));
 
     const transfer = res.events.find((e) => e.event === "stx_transfer_event");
@@ -135,8 +139,7 @@ describe("pyth-lazer-oracle-v1: verify-and-update-price-feeds", () => {
 
   it("charges no fee when the fee is zero (default)", () => {
     bootstrap();
-    const update = makeUpdate([{ id: 1, props: [[PROP.Price, 1n], [PROP.Exponent, 0n], [PROP.Confidence, 1n]] }]);
-    const res = submit(update, wallet1);
+    const res = submit(makeUpdate([feed(1, 1n, 0n, 1n, 5n)]), wallet1);
     expect(res.result).toBeOk(Cl.uint(1));
     expect(res.events.find((e) => e.event === "stx_transfer_event")).toBeUndefined();
   });
