@@ -216,25 +216,37 @@
 							remaining: (- (get remaining state) u1) })))))
 		e (err e)))
 
+;; Lazer's `evm` encoding has no Option type, so the reference PythLazerLib
+;; (pyth-crosschain lazer/contracts/evm v0.1.1) encodes a MISSING optional as the
+;; value 0: it treats a parsed 0 for Price/BestBid/BestAsk/Confidence/PublisherCount
+;; as ApplicableButMissing rather than Present (Exponent is the lone field it always
+;; marks Present). We mirror that here -- collapse a 0 to `none` for those fields --
+;; so our `(optional ...)` matches the protocol's intent and the SDK's parsed JSON.
+;; A 0 exponent is a real value, so exponent is stored literally.
+(define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
+(define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
+
 ;; Extract the value of a persisted property into the state; pass through
 ;; (advance only) for properties we don't persist. Errors on a short read.
+;; Optional fields collapse a 0 value to `none` (the Lazer "missing" sentinel,
+;; see above); exponent is stored literally.
 (define-private (set-property-field
 		(ptype uint) (bytes (buff 8192)) (voffset uint)
 		(state { bytes: (buff 8192), offset: uint, remaining: uint,
 			price: (optional int), exponent: (optional int), confidence: (optional uint),
 			publisher-count: (optional uint), best-bid: (optional int), best-ask: (optional int) }))
 	(if (is-eq ptype PROP_PRICE)
-		(ok (merge state { price: (some (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+		(ok (merge state { price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
 		(if (is-eq ptype PROP_BEST_BID)
-			(ok (merge state { best-bid: (some (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+			(ok (merge state { best-bid: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
 			(if (is-eq ptype PROP_BEST_ASK)
-				(ok (merge state { best-ask: (some (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+				(ok (merge state { best-ask: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
 				(if (is-eq ptype PROP_PUBLISHER_COUNT)
-					(ok (merge state { publisher-count: (some (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
+					(ok (merge state { publisher-count: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
 					(if (is-eq ptype PROP_EXPONENT)
 						(ok (merge state { exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
 						(if (is-eq ptype PROP_CONFIDENCE)
-							(ok (merge state { confidence: (some (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+							(ok (merge state { confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
 							(ok state))))))))
 
 ;; Value width (bytes) per property type (PLAN 3.4 / PythLazerStructs):

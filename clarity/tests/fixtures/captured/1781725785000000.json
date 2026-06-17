@@ -1,0 +1,84 @@
+{
+  "channel": 3,
+  "timestampUs": "1781725785000000",
+  "parsed": {
+    "timestampUs": "1781725785000000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 1522,
+        "price": "361000000",
+        "bestAskPrice": "361000001",
+        "publisherCount": 5,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1523,
+        "price": "363000000",
+        "bestBidPrice": "362999999",
+        "publisherCount": 5,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1524,
+        "price": "363000000",
+        "publisherCount": 5,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1525,
+        "price": "363000000",
+        "publisherCount": 5,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1526,
+        "price": "361000000",
+        "bestAskPrice": "361000001",
+        "publisherCount": 5,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 3251,
+        "price": "9627875",
+        "bestBidPrice": "9627750",
+        "bestAskPrice": "9628000",
+        "publisherCount": 2,
+        "exponent": -5,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 3252,
+        "price": "9607252",
+        "bestBidPrice": "9607000",
+        "bestAskPrice": "9607500",
+        "publisherCount": 2,
+        "exponent": -5,
+        "confidence": 2
+      },
+      {
+        "priceFeedId": 3253,
+        "price": "9589278",
+        "bestBidPrice": "9589000",
+        "bestAskPrice": "9589500",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 222
+      },
+      {
+        "priceFeedId": 3255,
+        "price": "10925567",
+        "bestBidPrice": "10925000",
+        "bestAskPrice": "10926562",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 567
+      }
+    ]
+  },
+  "evmHex": "2a22999af61799a2cc9adb9983c170cd9058f692bcec132b173060ca6d173e569bd33ec349866c63f7603664c8c550386f942bd92a38676846559a5995d0027a1f563ad40001b593c7d375000654785c8088400309000005f206000000000015846c4004fff8050000000000000001010000000000000000020000000015846c41030005000005f306000000000015a2f0c004fff8050000000000000001010000000015a2f0bf020000000000000000030005000005f406000000000015a2f0c004fff8050000000000000001010000000000000000020000000000000000030005000005f506000000000015a2f0c004fff8050000000000000001010000000000000000020000000000000000030005000005f606000000000015846c4004fff8050000000000000001010000000000000000020000000015846c4103000500000cb30600000000000092e8e304fffb05000000000000000101000000000092e86602000000000092e96003000200000cb40600000000000092985404fffb05000000000000000201000000000092975802000000000092994c03000200000cb50600000000000092521e04fffb0500000000000000de0100000000009251080200000000009252fc03000300000cb706000000000000a6b5ff04fffb050000000000000237010000000000a6b3c8020000000000a6b9e2030003"
+}

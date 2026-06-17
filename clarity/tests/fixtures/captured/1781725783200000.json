@@ -1,0 +1,154 @@
+{
+  "channel": 3,
+  "timestampUs": "1781725783200000",
+  "parsed": {
+    "timestampUs": "1781725783200000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 2935,
+        "price": "634603",
+        "bestBidPrice": "634421",
+        "bestAskPrice": "634775",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 147
+      },
+      {
+        "priceFeedId": 2937,
+        "price": "640682",
+        "bestBidPrice": "640023",
+        "bestAskPrice": "641280",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 598
+      },
+      {
+        "priceFeedId": 2978,
+        "price": "131600403",
+        "bestBidPrice": "131480000",
+        "bestAskPrice": "131720000",
+        "publisherCount": 2,
+        "exponent": -5,
+        "confidence": 397
+      },
+      {
+        "priceFeedId": 2980,
+        "price": "172995175",
+        "bestBidPrice": "172940000",
+        "bestAskPrice": "173040000",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 44825
+      },
+      {
+        "priceFeedId": 3016,
+        "price": "1385129",
+        "bestBidPrice": "1385000",
+        "bestAskPrice": "1386000",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 371
+      },
+      {
+        "priceFeedId": 3019,
+        "price": "42137183",
+        "bestBidPrice": "42116448",
+        "bestAskPrice": "42158303",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 12183
+      },
+      {
+        "priceFeedId": 3026,
+        "price": "321440",
+        "bestBidPrice": "321334",
+        "bestAskPrice": "321563",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 40
+      },
+      {
+        "priceFeedId": 3027,
+        "price": "318000",
+        "bestBidPrice": "317835",
+        "bestAskPrice": "318162",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 3
+      },
+      {
+        "priceFeedId": 3029,
+        "price": "318150",
+        "bestBidPrice": "318036",
+        "bestAskPrice": "318263",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 50
+      },
+      {
+        "priceFeedId": 3042,
+        "price": "7897687",
+        "bestBidPrice": "7896000",
+        "bestAskPrice": "7899000",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 1313
+      },
+      {
+        "priceFeedId": 3043,
+        "price": "7874515",
+        "bestBidPrice": "7873000",
+        "bestAskPrice": "7876000",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 1485
+      },
+      {
+        "priceFeedId": 3044,
+        "price": "7813000",
+        "bestBidPrice": "7811000",
+        "bestAskPrice": "7814000",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 501
+      },
+      {
+        "priceFeedId": 3045,
+        "price": "7749750",
+        "bestBidPrice": "7748000",
+        "bestAskPrice": "7751000",
+        "publisherCount": 2,
+        "exponent": -5,
+        "confidence": 250
+      },
+      {
+        "priceFeedId": 3052,
+        "price": "42962503",
+        "bestBidPrice": "42941624",
+        "bestAskPrice": "42983809",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 12503
+      },
+      {
+        "priceFeedId": 3053,
+        "price": "44892551",
+        "bestBidPrice": "44865890",
+        "bestAskPrice": "44908845",
+        "publisherCount": 4,
+        "exponent": -5,
+        "confidence": 7449
+      },
+      {
+        "priceFeedId": 3057,
+        "price": "88875000",
+        "bestBidPrice": "88850000",
+        "bestAskPrice": "88900000",
+        "publisherCount": 3,
+        "exponent": -5,
+        "confidence": 1
+      }
+    ]
+  },
+  "evmHex": "2a22999ad2924ca8f2516c27825c9bf6e93b5b623176eb70ed47935638809f18d96b11ed3fab8e10b4decbe488cc6417bc07295a9f06faf477a580512493abf520356b9e0002fe93c7d375000654785c651100031000000b770600000000000009aeeb04fffb05000000000000009301000000000009ae3502000000000009af9703000400000b790600000000000009c6aa04fffb05000000000000025601000000000009c41702000000000009c90003000400000ba206000000000007d8101304fffb05000000000000018d010000000007d639c0020000000007d9e34003000200000ba40600000000000a4fb26704fffb05000000000000af1901000000000a4edae002000000000a50618003000400000bc8060000000000001522a904fffb05000000000000017301000000000015222802000000000015261003000300000bcb0600000000000282f65f04fffb050000000000002f9701000000000282a5600200000000028348df03000400000bd20600000000000004e7a004fffb05000000000000002801000000000004e73602000000000004e81b03000400000bd30600000000000004da3004fffb05000000000000000301000000000004d98b02000000000004dad203000300000bd50600000000000004dac604fffb05000000000000003201000000000004da5402000000000004db3703000400000be20600000000000078825704fffb050000000000000521010000000000787bc002000000000078877803000300000be3060000000000007827d304fffb0500000000000005cd0100000000007821e8020000000000782da003000300000be40600000000000077378804fffb0500000000000001f5010000000000772fb8020000000000773b7003000300000be50600000000000076407604fffb0500000000000000fa0100000000007639a002000000000076455803000200000bec060000000000028f8e4704fffb0500000000000030d70100000000028f3cb80200000000028fe18103000400000bed06000000000002ad018704fffb050000000000001d19010000000002ac9962020000000002ad412d03000400000bf1060000000000054c1ff804fffb0500000000000000010100000000054bbe500200000000054c81a0030003"
+}

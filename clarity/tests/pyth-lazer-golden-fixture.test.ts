@@ -68,7 +68,9 @@ function trust(signerHex: string) {
 
 // === STAGING vector (PythLazer.t.sol v0.1.1) ===============================
 // Properties (out of type order): Price, BestAsk(0), BestBid(0), PublisherCount(1),
-// Exponent(-8); no confidence.
+// Exponent(-8); no confidence. BestBid/BestAsk are 0 -- Lazer's "missing" sentinel
+// for optionals -- so they decode to `none` (decoder `some-if-nonzero-*`), matching
+// the reference PythLazerLib (a 0 optional => ApplicableButMissing).
 const STAGING_UPDATE = hexToBytes(
   "2a22999a9ee4e2a3df5affd0ad8c7c46c96d3b5ef197dd653bedd8f44a4b6b69" +
     "b767fbc66341e80b80acb09ead98c60d169b9a99657ebada101f447378f227bf" +
@@ -81,7 +83,7 @@ const STAGING_SIGNER = "033fa670134f8f961047bf009e0e4907c79005fdf83eef5eef13d2f3
 const STAGING_DECODE = Cl.tuple({
   timestamp: Cl.uint(1_738_270_008_001_000n),
   channel: Cl.uint(1),
-  "price-feeds": Cl.list([feedRecord(6, 100_000_000n, -8n, null, 1n, 0n, 0n)]),
+  "price-feeds": Cl.list([feedRecord(6, 100_000_000n, -8n, null, 1n, null, null)]),
 });
 
 // === PRODUCTION vector (live API capture) ==================================

@@ -176,6 +176,9 @@ function expectedFeedFromSpec(f: any) {
   for (const [name, v] of f.props) {
     const o = PROP_OUT[name as string];
     if (!o) continue;
+    // Mirror the decoder: a 0 in an optional field is Lazer's "missing" sentinel and
+    // decodes to none; exponent is always literal (a 0 exponent is a real value).
+    if (name !== "Exponent" && BigInt(v) === 0n) continue;
     t[o.field] = o.kind === "int" ? Cl.some(Cl.int(BigInt(v))) : Cl.some(Cl.uint(BigInt(v)));
   }
   return Cl.tuple(t);
@@ -207,10 +210,16 @@ describe("fixtures: captured real Lazer updates", () => {
 
     // Model the per-feed monotonic guard to predict each submit's write count and
     // the final winner per feed -- works for any set (mixed feeds, gaps, dups).
+    // The oracle stores a feed only if it has all required fields (price, exponent,
+    // publisher-count); feeds missing one are skipped, so they neither count as a
+    // write nor land in storage. Mirror that here (the screened fixtures include
+    // feeds without confidence / best-bid / best-ask).
+    const hasRequired = (f: any) => f.price != null && f.exponent != null && f.publisherCount != null;
     const winner = new Map<number, { f: any; c: any }>();
     for (const c of seq) {
       let writes = 0;
       for (const f of c.parsed.priceFeeds) {
+        if (!hasRequired(f)) continue;
         const w = winner.get(f.priceFeedId);
         if (!w || BigInt(c.timestampUs) > BigInt(w.c.timestampUs)) {
           winner.set(f.priceFeedId, { f, c });

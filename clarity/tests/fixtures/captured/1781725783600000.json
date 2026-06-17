@@ -1,0 +1,129 @@
+{
+  "channel": 3,
+  "timestampUs": "1781725783600000",
+  "parsed": {
+    "timestampUs": "1781725783600000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 673,
+        "price": "119952247",
+        "bestAskPrice": "119952248",
+        "publisherCount": 7,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 694,
+        "price": "347350356",
+        "bestBidPrice": "347285369",
+        "bestAskPrice": "347415344",
+        "publisherCount": 4,
+        "exponent": -8,
+        "confidence": 64988
+      },
+      {
+        "priceFeedId": 736,
+        "price": "103433758",
+        "bestBidPrice": "103433757",
+        "bestAskPrice": "103433759",
+        "publisherCount": 6,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 744,
+        "price": "116925361",
+        "bestBidPrice": "116925359",
+        "bestAskPrice": "116925364",
+        "publisherCount": 6,
+        "exponent": -8,
+        "confidence": 4
+      },
+      {
+        "priceFeedId": 1791,
+        "price": "100266420",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1795,
+        "price": "100000000",
+        "publisherCount": 4,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1797,
+        "price": "100000000",
+        "publisherCount": 4,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1807,
+        "price": "100192672",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1814,
+        "price": "100000000",
+        "publisherCount": 4,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1821,
+        "price": "101616043",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1823,
+        "price": "100229826",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1826,
+        "price": "100000000",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1832,
+        "price": "100091807",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1836,
+        "price": "100195465",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1842,
+        "price": "100390924",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      },
+      {
+        "priceFeedId": 1846,
+        "price": "100000000",
+        "publisherCount": 3,
+        "exponent": -8,
+        "confidence": 1
+      }
+    ]
+  },
+  "evmHex": "2a22999ac9256ac51681341feddb9ca248f6315804b12868518878d69bc877d26a3bfa4c6967c6bc7d5e74b23431c3c722ed437fcf6c4d53bd3ddd88a5970859bd7ae6650002fe93c7d375000654785c6b2b800310000002a10600000000000726537704fff8050000000000000001010000000000000000020000000007265378030007000002b606000000000014b4255404fff805000000000000fddc010000000014b32779020000000014b52330030004000002e0060000000000062a461e04fff80500000000000000010100000000062a461d0200000000062a461f030006000002e806000000000006f823b104fff8050000000000000004010000000006f823af020000000006f823b4030006000006ff06000000000005f9f1b404fff80500000000000000010100000000000000000200000000000000000300030000070306000000000005f5e10004fff80500000000000000010100000000000000000200000000000000000300040000070506000000000005f5e10004fff80500000000000000010100000000000000000200000000000000000300040000070f06000000000005f8d1a004fff80500000000000000010100000000000000000200000000000000000300030000071606000000000005f5e10004fff80500000000000000010100000000000000000200000000000000000300040000071d060000000000060e89ab04fff80500000000000000010100000000000000000200000000000000000300030000071f06000000000005f962c204fff80500000000000000010100000000000000000200000000000000000300030000072206000000000005f5e10004fff80500000000000000010100000000000000000200000000000000000300030000072806000000000005f7479f04fff80500000000000000010100000000000000000200000000000000000300030000072c06000000000005f8dc8904fff80500000000000000010100000000000000000200000000000000000300030000073206000000000005fbd80c04fff80500000000000000010100000000000000000200000000000000000300030000073606000000000005f5e10004fff8050000000000000001010000000000000000020000000000000000030003"
+}
