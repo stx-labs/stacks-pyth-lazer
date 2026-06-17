@@ -1,0 +1,10 @@
+{
+  "description": "signature region (r||s||recovery-id) zeroed out; secp256k1 recovery fails to produce a key",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ],
+  "corrupt": "bad-signature",
+  "expectErr": 2104
+}

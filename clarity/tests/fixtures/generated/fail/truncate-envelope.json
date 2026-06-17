@@ -1,0 +1,10 @@
+{
+  "description": "update truncated below the 71-byte envelope header; recover-signer rejects it before reading anything",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ],
+  "corrupt": "truncate-envelope",
+  "expectErr": 2101
+}

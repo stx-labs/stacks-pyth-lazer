@@ -1,0 +1,161 @@
+{
+  "description": "17 feeds declared, one over MAX_FEEDS (16); rejected at the header before any feed is parsed",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 300,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 301,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 302,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 303,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 304,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 305,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 306,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 307,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 308,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 309,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 310,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 311,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 312,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 313,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 314,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 315,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 316,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "expectErr": 2202
+}

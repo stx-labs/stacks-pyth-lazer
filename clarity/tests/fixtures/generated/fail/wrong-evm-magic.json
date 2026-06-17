@@ -1,0 +1,10 @@
+{
+  "description": "EVM envelope magic (first 4 bytes) corrupted after signing; fails the envelope magic check",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ],
+  "corrupt": "evm-magic",
+  "expectErr": 2102
+}

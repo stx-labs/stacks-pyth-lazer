@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Cl } from "@stacks/transactions";
 import { hexToBytes } from "@noble/hashes/utils";
 import { readdirSync, readFileSync } from "node:fs";
-import { buildEvmUpdate, buildLazerPayload, PROP, TEST_PUBKEY, type FeedSpec } from "./helpers";
+import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, type FeedSpec } from "./helpers";
 
 // ---------------------------------------------------------------------------
 // Data-driven fixture runner. Every file under tests/fixtures/ is a test case;
@@ -132,21 +132,53 @@ const toFeedSpec = (f: any): FeedSpec => ({
   props: f.props.map(([t, v]: [number | string, string]) => [propType(t), BigInt(v)]),
 });
 
+// Build the signed update for a spec, optionally applying a `corrupt` directive to
+// drive a specific decoder error. Directives are grouped by stage: payload mutations
+// happen BEFORE signing (the signature still covers them, so the failure surfaces in
+// the payload parser), envelope mutations AFTER signing (they break the outer frame /
+// signature), and `untrusted-signer` swaps the signing key for a valid-but-untrusted one.
+const KNOWN_CORRUPT = new Set([
+  "payload-magic", "trailing-overlay", "truncate-payload", "inflate-feed-count",
+  "untrusted-signer", "evm-magic", "envelope-overlay", "bad-signature", "truncate-envelope",
+]);
 function buildUpdateFromSpec(spec: any): Uint8Array {
+  const c: string | undefined = spec.corrupt;
+  if (c && !KNOWN_CORRUPT.has(c)) throw new Error(`unknown corrupt directive: ${c}`);
+
   let payload = buildLazerPayload({
     timestamp: BigInt(spec.timestampUs),
     channel: spec.channel,
     feeds: spec.feeds.map(toFeedSpec),
   });
-  if (spec.corrupt === "payload-magic") {
+  // pre-sign payload mutations (signature covers the mutated bytes)
+  if (c === "payload-magic") {
     payload = Uint8Array.from(payload);
-    payload[0] = 0x00; // break the FORMAT_MAGIC the parser checks first
-  } else if (spec.corrupt === "trailing-overlay") {
-    payload = Uint8Array.from([...payload, 0xff, 0xff]); // unconsumed bytes after the last feed
-  } else if (spec.corrupt) {
-    throw new Error(`unknown corrupt directive: ${spec.corrupt}`);
+    payload[0] = 0x00; // wrong Lazer FORMAT_MAGIC -> ERR_INVALID_PAYLOAD_MAGIC (2201)
+  } else if (c === "trailing-overlay") {
+    payload = Uint8Array.from([...payload, 0xff, 0xff]); // bytes after the last feed -> ERR_PAYLOAD_OVERLAY (2204)
+  } else if (c === "truncate-payload") {
+    payload = payload.slice(0, payload.length - (spec.corruptBytes ?? 3)); // cut a value short -> ERR_INVALID_FEED_DATA (2203)
+  } else if (c === "inflate-feed-count") {
+    payload = Uint8Array.from(payload);
+    payload[13] += 1; // PAYLOAD_FEEDS_LEN_OFFSET: claim one more feed than present -> ERR_INVALID_FEED_DATA (2203)
   }
-  return buildEvmUpdate(payload); // signs keccak256(payload) with TEST_PRIVKEY
+
+  // signing: an untrusted (but valid) signature -> ERR_UNTRUSTED_SIGNER (2105)
+  let update = buildEvmUpdate(payload, c === "untrusted-signer" ? OTHER_PRIVKEY : undefined);
+
+  // post-sign envelope mutations (break the outer frame)
+  if (c === "evm-magic") {
+    update = Uint8Array.from(update);
+    update[0] = 0x00; // wrong EVM envelope magic -> ERR_INVALID_EVM_MAGIC (2102)
+  } else if (c === "envelope-overlay") {
+    update = Uint8Array.from([...update, 0xff]); // byte past the signed payload -> ERR_OVERLAY_PRESENT (2103)
+  } else if (c === "bad-signature") {
+    update = Uint8Array.from(update);
+    update.fill(0x00, 4, 69); // zero r||s||recid: unrecoverable -> ERR_INVALID_SIGNATURE (2104)
+  } else if (c === "truncate-envelope") {
+    update = update.slice(0, 50); // shorter than the 71-byte envelope header -> ERR_INPUT_TOO_SHORT (2101)
+  }
+  return update;
 }
 
 // PROP name -> decoder output field + signedness. Props not listed here (e.g.

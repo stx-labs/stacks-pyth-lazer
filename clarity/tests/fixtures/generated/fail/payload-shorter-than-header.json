@@ -1,0 +1,11 @@
+{
+  "description": "payload truncated below the 14-byte header (magic+timestamp+channel+feeds-len); rejected by decode-payload's minimum-length guard before any field is read",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "12345"]] }
+  ],
+  "corrupt": "truncate-payload",
+  "corruptBytes": 16,
+  "expectErr": 2203
+}

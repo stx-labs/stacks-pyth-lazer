@@ -1,0 +1,69 @@
+{
+  "description": "a feed declaring 14 properties, one over the 13 property slots; the property fold cannot consume them all",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 320,
+      "props": [
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ],
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    }
+  ],
+  "expectErr": 2206
+}

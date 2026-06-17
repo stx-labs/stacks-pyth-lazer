@@ -1,0 +1,11 @@
+{
+  "description": "payload cut short mid-property (last 3 bytes of the price's 8-byte value dropped before signing); the property read runs past the end of the buffer",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "12345"]] }
+  ],
+  "corrupt": "truncate-payload",
+  "corruptBytes": 3,
+  "expectErr": 2203
+}

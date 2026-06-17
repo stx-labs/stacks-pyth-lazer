@@ -1,0 +1,10 @@
+{
+  "description": "header claims one more feed than the payload actually contains (feeds-len incremented before signing); parsing the phantom feed reads past the end",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ],
+  "corrupt": "inflate-feed-count",
+  "expectErr": 2203
+}

@@ -1,0 +1,10 @@
+{
+  "description": "a byte appended after the signed payload (not covered by the signature); the envelope's exact-length check rejects the trailing overlay",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ],
+  "corrupt": "envelope-overlay",
+  "expectErr": 2103
+}
