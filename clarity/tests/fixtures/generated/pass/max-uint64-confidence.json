@@ -1,0 +1,8 @@
+{
+  "description": "confidence at the maximum unsigned 64-bit value (2^64 - 1); exercises read-uint-be? at full width",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 22, "props": [["Price", "1000"], ["Exponent", "-8"], ["Confidence", "18446744073709551615"], ["PublisherCount", "5"]] }
+  ]
+}

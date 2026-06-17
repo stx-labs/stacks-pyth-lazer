@@ -1,0 +1,18 @@
+{
+  "description": "properties listed in reverse type order (confidence, exponent, publisher-count, best-ask, best-bid, price); the parser keys on the type byte, not position, so the decode is identical to in-order",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 30,
+      "props": [
+        ["Confidence", "500"],
+        ["Exponent", "-8"],
+        ["PublisherCount", "9"],
+        ["BestAskPrice", "1010"],
+        ["BestBidPrice", "990"],
+        ["Price", "1000"]
+      ]
+    }
+  ]
+}

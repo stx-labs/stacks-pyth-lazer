@@ -1,0 +1,17 @@
+{
+  "description": "best-bid at min int64 and best-ask at max int64 in the same feed; both signed-64 boundaries at once",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 23,
+      "props": [
+        ["Price", "1000"],
+        ["Exponent", "-8"],
+        ["BestBidPrice", "-9223372036854775808"],
+        ["BestAskPrice", "9223372036854775807"],
+        ["PublisherCount", "5"]
+      ]
+    }
+  ]
+}

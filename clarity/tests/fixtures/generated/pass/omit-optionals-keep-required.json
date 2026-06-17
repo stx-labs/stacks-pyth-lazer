@@ -1,0 +1,8 @@
+{
+  "description": "feed carries only the oracle-required fields (price, exponent, publisher-count); confidence/best-bid/best-ask are omitted from the byte stream and decode to none",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 10, "props": [["Price", "4200000000"], ["Exponent", "-8"], ["PublisherCount", "12"]] }
+  ]
+}

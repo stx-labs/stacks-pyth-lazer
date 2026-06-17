@@ -1,0 +1,8 @@
+{
+  "description": "exponent of 0 is a REAL value and must stay (some 0) -- the lone field exempt from the 0-collapse (matches the reference PythLazerLib, which always marks Exponent present)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 15, "props": [["Price", "12345"], ["Exponent", "0"], ["PublisherCount", "3"]] }
+  ]
+}

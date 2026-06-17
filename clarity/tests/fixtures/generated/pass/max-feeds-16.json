@@ -1,0 +1,23 @@
+{
+  "description": "the maximum 16 feeds in one update (MAX_FEEDS); 17 would be rejected. Exercises the outer feed fold to its limit",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 100, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 101, "props": [["Price", "1001"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 102, "props": [["Price", "1002"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 103, "props": [["Price", "1003"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 104, "props": [["Price", "1004"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 105, "props": [["Price", "1005"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 106, "props": [["Price", "1006"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 107, "props": [["Price", "1007"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 108, "props": [["Price", "1008"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 109, "props": [["Price", "1009"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 110, "props": [["Price", "1010"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 111, "props": [["Price", "1011"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 112, "props": [["Price", "1012"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 113, "props": [["Price", "1013"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 114, "props": [["Price", "1014"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 115, "props": [["Price", "1015"], ["Exponent", "-8"], ["PublisherCount", "3"]] }
+  ]
+}

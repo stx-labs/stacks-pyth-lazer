@@ -1,0 +1,8 @@
+{
+  "description": "feed with price + confidence only; exponent, best-bid, best-ask, publisher-count omitted (decode to none)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 12, "props": [["Price", "123456"], ["Confidence", "789"]] }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "first feed declares zero properties (propCount 0, all fields none); a normal feed follows it, verifying the empty feed advances exactly past its 5-byte header so the next feed still parses",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 81, "props": [] },
+    { "id": 82, "props": [["Price", "1234"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ]
+}

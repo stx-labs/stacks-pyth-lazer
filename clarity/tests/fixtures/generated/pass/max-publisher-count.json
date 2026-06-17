@@ -1,0 +1,8 @@
+{
+  "description": "publisher-count at the maximum unsigned 16-bit value (65535); exercises the 2-byte read-uint-be?",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 26, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "65535"]] }
+  ]
+}

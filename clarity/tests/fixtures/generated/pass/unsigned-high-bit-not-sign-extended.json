@@ -1,0 +1,11 @@
+{
+  "description": "confidence = 2^63 and publisher-count = 2^15, i.e. unsigned values with the top bit set; they must decode as large POSITIVE uints, not be misread as negative (guards read-uint-be? against accidental sign extension)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 60,
+      "props": [["Price", "1000"], ["Exponent", "-8"], ["Confidence", "9223372036854775808"], ["PublisherCount", "32768"]]
+    }
+  ]
+}

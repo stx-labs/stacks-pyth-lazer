@@ -1,0 +1,8 @@
+{
+  "description": "payload header at its extremes: timestamp at max uint64 (2^64 - 1) and channel at max u8 (255); channel is recorded verbatim, not validated",
+  "channel": 255,
+  "timestampUs": "18446744073709551615",
+  "feeds": [
+    { "id": 40, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ]
+}

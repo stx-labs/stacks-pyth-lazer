@@ -1,0 +1,6 @@
+{
+  "description": "a well-formed update declaring zero feeds; decodes to an empty price-feeds list (header is consumed exactly, no overlay)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": []
+}

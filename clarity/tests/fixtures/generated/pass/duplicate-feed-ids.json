@@ -1,0 +1,9 @@
+{
+  "description": "two feeds sharing the same feed-id in one update; the DECODER does not dedupe -- it returns both records in order. (De-duplication is a storage concern: the oracle/storage applies last-write-wins by feed-id.)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 70, "props": [["Price", "100"], ["Exponent", "-8"], ["PublisherCount", "3"]] },
+    { "id": 70, "props": [["Price", "200"], ["Exponent", "-8"], ["PublisherCount", "4"]] }
+  ]
+}

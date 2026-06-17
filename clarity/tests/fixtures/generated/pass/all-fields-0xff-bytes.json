@@ -1,0 +1,18 @@
+{
+  "description": "every field encoded as all-0xFF bytes of its width, to prove the readers respect signedness and width on identical bytes: price/best-bid/best-ask (i64) and exponent (i16) decode to -1; publisher-count (u16) to 65535; confidence (u64) to 2^64-1. A signed/unsigned discrimination test on the same byte pattern.",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 90,
+      "props": [
+        ["Price", "-1"],
+        ["BestBidPrice", "-1"],
+        ["BestAskPrice", "-1"],
+        ["Exponent", "-1"],
+        ["PublisherCount", "65535"],
+        ["Confidence", "18446744073709551615"]
+      ]
+    }
+  ]
+}

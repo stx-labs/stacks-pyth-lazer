@@ -1,0 +1,9 @@
+{
+  "description": "exponent at both signed 16-bit boundaries (max 32767 and min -32768); exercises the 2-byte read-int-be? sign extension",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 24, "props": [["Price", "1000"], ["Exponent", "32767"], ["PublisherCount", "5"]] },
+    { "id": 25, "props": [["Price", "2000"], ["Exponent", "-32768"], ["PublisherCount", "6"]] }
+  ]
+}

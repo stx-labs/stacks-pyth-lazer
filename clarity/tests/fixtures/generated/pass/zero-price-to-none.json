@@ -1,0 +1,8 @@
+{
+  "description": "price present in the bytes as 0 (the sentinel) decodes to none, even though exponent and publisher-count are present; confirms price gets the same 0-collapse treatment",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 14, "props": [["Price", "0"], ["Exponent", "-8"], ["PublisherCount", "9"]] }
+  ]
+}

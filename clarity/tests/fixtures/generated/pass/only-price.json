@@ -1,0 +1,8 @@
+{
+  "description": "minimal feed: only a price property is present; every other field decodes to none",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 11, "props": [["Price", "999999"]] }
+  ]
+}

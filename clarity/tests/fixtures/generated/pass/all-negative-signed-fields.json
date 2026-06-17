@@ -1,0 +1,18 @@
+{
+  "description": "every signed field negative at once (price, best-bid, best-ask, exponent), with positive confidence/publisher-count; mirrors funding-rate-style feeds where prices can be negative",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 27,
+      "props": [
+        ["Price", "-50000"],
+        ["Exponent", "-10"],
+        ["BestBidPrice", "-50001"],
+        ["BestAskPrice", "-49999"],
+        ["Confidence", "100"],
+        ["PublisherCount", "7"]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "description": "one update mixing feed shapes: a full feed, a price-only feed, an all-zero feed (only exponent survives), and a feed that LEADS with an unpersisted property (EmaPrice) before its persisted ones",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 50,
+      "props": [
+        ["Price", "6000000000"],
+        ["Exponent", "-8"],
+        ["Confidence", "120000"],
+        ["BestBidPrice", "5999990000"],
+        ["BestAskPrice", "6000010000"],
+        ["PublisherCount", "15"]
+      ]
+    },
+    { "id": 51, "props": [["Price", "42"]] },
+    { "id": 52, "props": [["Price", "0"], ["Exponent", "0"], ["Confidence", "0"]] },
+    {
+      "id": 53,
+      "props": [["EmaPrice", "5"], ["Price", "7777"], ["Exponent", "-6"], ["MarketSession", "1"], ["PublisherCount", "2"]]
+    }
+  ]
+}

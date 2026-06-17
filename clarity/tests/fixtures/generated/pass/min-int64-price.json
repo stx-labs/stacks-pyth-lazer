@@ -1,0 +1,8 @@
+{
+  "description": "price at the minimum signed 64-bit value (-2^63); the most-negative two's-complement input, exercising sign extension at the boundary",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 21, "props": [["Price", "-9223372036854775808"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ]
+}

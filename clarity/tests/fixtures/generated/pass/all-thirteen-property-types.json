@@ -1,0 +1,25 @@
+{
+  "description": "a feed declaring all 13 property types (0..12), the maximum a feed can carry; exercises every width (1/2/8) and confirms the six persisted fields decode while the seven unpersisted types are advanced over and left none",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 32,
+      "props": [
+        ["Price", "4200000000"],
+        ["BestBidPrice", "4199990000"],
+        ["BestAskPrice", "4200010000"],
+        ["PublisherCount", "18"],
+        ["Exponent", "-8"],
+        ["Confidence", "1500000"],
+        ["FundingRate", "-12345"],
+        ["FundingTimestamp", "1700000000"],
+        ["FundingRateInterval", "28800"],
+        ["MarketSession", "2"],
+        ["EmaPrice", "4200005000"],
+        ["EmaConfidence", "1400000"],
+        ["FeedUpdateTimestamp", "1700000000000000"]
+      ]
+    }
+  ]
+}
