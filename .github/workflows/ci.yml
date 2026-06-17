@@ -9,6 +9,11 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    # The Clarity workspace lives in clarity/; run all shell steps from there.
+    # (Only affects `run:` steps; `uses:` steps like checkout are unaffected.)
+    defaults:
+      run:
+        working-directory: clarity
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

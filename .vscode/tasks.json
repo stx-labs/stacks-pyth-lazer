@@ -5,14 +5,16 @@
       "label": "check contracts",
       "group": "test",
       "type": "shell",
-      "command": "clarinet check"
+      "command": "clarinet check",
+      "options": { "cwd": "${workspaceFolder}/clarity" }
     },
     {
       "type": "npm",
       "script": "test",
       "group": "test",
       "problemMatcher": [],
-      "label": "npm test"
+      "label": "npm test",
+      "path": "clarity/"
     }
   ]
 }
