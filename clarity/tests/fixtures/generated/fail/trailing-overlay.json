@@ -1,0 +1,10 @@
+{
+  "description": "well-formed update with two extra bytes after the last feed",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1"], ["Exponent", "0"], ["PublisherCount", "1"]] }
+  ],
+  "corrupt": "trailing-overlay",
+  "expectErr": 2204
+}

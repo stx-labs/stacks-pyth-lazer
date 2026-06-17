@@ -1,0 +1,9 @@
+{
+  "description": "feed declares an unknown property type (13, past the v1 enum)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [[13, "1"]] }
+  ],
+  "expectErr": 2205
+}

@@ -1,0 +1,18 @@
+{
+  "description": "single feed carrying all six v1 properties",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 1,
+      "props": [
+        ["Price", "4200000000"],
+        ["Exponent", "-8"],
+        ["Confidence", "1500000"],
+        ["PublisherCount", "18"],
+        ["BestBidPrice", "4199990000"],
+        ["BestAskPrice", "4200010000"]
+      ]
+    }
+  ]
+}

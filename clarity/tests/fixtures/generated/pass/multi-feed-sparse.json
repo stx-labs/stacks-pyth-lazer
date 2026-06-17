@@ -1,0 +1,24 @@
+{
+  "description": "two feeds; the second has a negative price and omits confidence + best-bid/ask (decode to none)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 1,
+      "props": [
+        ["Price", "100"],
+        ["Exponent", "-2"],
+        ["Confidence", "5"],
+        ["PublisherCount", "7"]
+      ]
+    },
+    {
+      "id": 2,
+      "props": [
+        ["Price", "-50"],
+        ["Exponent", "-4"],
+        ["PublisherCount", "8"]
+      ]
+    }
+  ]
+}

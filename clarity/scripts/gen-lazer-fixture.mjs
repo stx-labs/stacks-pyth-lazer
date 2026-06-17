@@ -4,7 +4,9 @@
 //   node --env-file=.env scripts/gen-lazer-fixture.mjs
 //
 // Output:
-//   tests/fixtures/lazer/captured-updates.json   raw evm hex + Pyth's parsed values
+//   tests/fixtures/captured/<timestampUs>.json   one file per update (raw evm hex +
+//                                                 Pyth's parsed values); re-running
+//                                                 adds new timestamps, keeps existing
 // Console:
 //   - per-property presence summary (the schema-finalization signal: which of
 //     price/exponent/confidence/bestBid/bestAsk/publisherCount Pyth ALWAYS sends)
@@ -26,9 +28,10 @@ if (!TOKEN) {
 const FEEDS = { 1: "Crypto.BTC/USD", 2: "Crypto.ETH/USD", 6: "Crypto.SOL/USD" };
 const PROPERTIES = ["price", "exponent", "confidence", "bestBidPrice", "bestAskPrice", "publisherCount"];
 const CHANNEL = "real_time";
+const CHANNEL_NUM = { real_time: 1 }[CHANNEL]; // on-chain Channel enum value
 const TARGET_UPDATES = 8;
 const TIMEOUT_MS = 30_000;
-const OUT_DIR = "tests/fixtures/lazer";
+const OUT_DIR = "tests/fixtures/captured";
 
 // Recover the secp256k1 signer of one `evm` update (magic|r|s|recid|len|payload).
 // Returns the 33-byte compressed pubkey our governance keys on, or null if the
@@ -66,14 +69,20 @@ function finish() {
   if (finish.called) return;
   finish.called = true;
 
+  if (CHANNEL_NUM === undefined) throw new Error(`unmapped channel: ${CHANNEL}`);
   mkdirSync(OUT_DIR, { recursive: true });
-  writeFileSync(`${OUT_DIR}/captured-updates.json`, JSON.stringify({
-    feeds: FEEDS, properties: PROPERTIES, channel: CHANNEL,
-    capturedAtNote: "real Pyth Lazer evm updates; values are public market data",
-    updates: captured,
-  }, null, 2) + "\n");
+  // One self-contained file per update, named by publish-time. Re-running adds new
+  // timestamps and overwrites a same-timestamp recapture; it never deletes others.
+  for (const u of captured) {
+    writeFileSync(`${OUT_DIR}/${u.timestampUs}.json`, JSON.stringify({
+      channel: CHANNEL_NUM,
+      timestampUs: u.timestampUs,
+      parsed: u.parsed,
+      evmHex: u.evmHex,
+    }, null, 2) + "\n");
+  }
 
-  console.log(`\nCaptured ${captured.length} updates -> ${OUT_DIR}/captured-updates.json`);
+  console.log(`\nCaptured ${captured.length} updates -> ${OUT_DIR}/<timestampUs>.json (one file each)`);
 
   // Property-presence summary: for each (feed, property), how often it was present.
   const seen = {};

@@ -1,0 +1,10 @@
+{
+  "description": "validly signed update whose payload magic has been zeroed",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1"], ["Exponent", "0"], ["PublisherCount", "1"]] }
+  ],
+  "corrupt": "payload-magic",
+  "expectErr": 2201
+}
