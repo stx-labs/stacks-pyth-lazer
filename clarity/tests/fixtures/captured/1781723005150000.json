@@ -1,0 +1,37 @@
+{
+  "channel": 1,
+  "timestampUs": "1781723005150000",
+  "parsed": {
+    "timestampUs": "1781723005150000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 1,
+        "price": "6543962355712",
+        "bestBidPrice": "6543577337828",
+        "bestAskPrice": "6544117922973",
+        "publisherCount": 18,
+        "exponent": -8,
+        "confidence": 3073040290
+      },
+      {
+        "priceFeedId": 2,
+        "price": "176873424667",
+        "bestBidPrice": "176866172205",
+        "bestAskPrice": "176874782115",
+        "publisherCount": 19,
+        "exponent": -8,
+        "confidence": 50217112
+      },
+      {
+        "priceFeedId": 6,
+        "price": "7334509484",
+        "bestBidPrice": "7334210204",
+        "bestAskPrice": "7335087734",
+        "publisherCount": 16,
+        "exponent": -8,
+        "confidence": 1141286
+      }
+    ]
+  },
+  "evmHex": "2a22999a29ecca6009fd6fd87053734fecff95eb9de9a8fbdf13d190678f7dd7803bf92968e7a59b03074a5708da8b82f31ea53f84c6cc1cc24f7d8c85df9284e314708801009b93c7d37500065477b6cf63300103000000010600000005f3a28d380004fff80500000000b72adfa201000005f38b9a4fe402000005f3abd2fc9d030012000000020600000000292e7a471b04fff8050000000002fe409801000000292e0b9d2d02000000292e8efda303001300000006060000000001b52bbbac04fff8050000000000116a260100000001b5272a9c0200000001b5348e76030010"
+}

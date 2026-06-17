@@ -3,6 +3,11 @@
 //
 //   node --env-file=.env scripts/gen-lazer-fixture.mjs
 //
+// Capture more, spaced out (one roughly every 90s) for temporal spread:
+//
+//   LAZER_CAPTURE_COUNT=12 LAZER_CAPTURE_STAGGER_MS=90000 \
+//     node --env-file=.env scripts/gen-lazer-fixture.mjs
+//
 // Output:
 //   tests/fixtures/captured/<timestampUs>.json   one file per update (raw evm hex +
 //                                                 Pyth's parsed values); re-running
@@ -29,9 +34,14 @@ const FEEDS = { 1: "Crypto.BTC/USD", 2: "Crypto.ETH/USD", 6: "Crypto.SOL/USD" };
 const PROPERTIES = ["price", "exponent", "confidence", "bestBidPrice", "bestAskPrice", "publisherCount"];
 const CHANNEL = "real_time";
 const CHANNEL_NUM = { real_time: 1 }[CHANNEL]; // on-chain Channel enum value
-const TARGET_UPDATES = 8;
-const TIMEOUT_MS = 30_000;
+// How many updates to capture and how far to space them. The real_time stream
+// emits ~20x/sec; STAGGER_MS samples at most one update per interval for temporal
+// spread (0 = take them consecutively). Both overridable via env.
+const TARGET_UPDATES = Number(process.env.LAZER_CAPTURE_COUNT ?? 8);
+const STAGGER_MS = Number(process.env.LAZER_CAPTURE_STAGGER_MS ?? 0);
 const OUT_DIR = "tests/fixtures/captured";
+// Enough wall-clock for the whole staggered run (the first update is immediate) + buffer.
+const TIMEOUT_MS = TARGET_UPDATES * STAGGER_MS + 60_000;
 
 // Recover the secp256k1 signer of one `evm` update (magic|r|s|recid|len|payload).
 // Returns the 33-byte compressed pubkey our governance keys on, or null if the
@@ -61,6 +71,7 @@ const client = await PythLazerClient.create({
 });
 
 const captured = [];
+let lastCaptureMs = 0;
 const done = () => {
   finish();
 };
@@ -125,13 +136,17 @@ client.addMessageListener((event) => {
   if (msg.type === "subscribedWithInvalidFeedIdsIgnored") { console.log("subscribed; ignored:", msg.ignoredInvalidFeedIds); return; }
   if (msg.type === "error" || msg.type === "subscriptionError") { console.error("server error:", msg.error); return; }
   if (msg.type !== "streamUpdated") return;
+  const nowMs = Date.now();
+  // Sample at most one update per STAGGER_MS window; the first is captured immediately.
+  if (captured.length > 0 && nowMs - lastCaptureMs < STAGGER_MS) return;
+  lastCaptureMs = nowMs;
   captured.push({
     seq: captured.length + 1,
     timestampUs: msg.parsed?.timestampUs,
     parsed: msg.parsed,
     evmHex: msg.evm?.data,
   });
-  process.stdout.write(`\rcaptured ${captured.length}/${TARGET_UPDATES}`);
+  console.log(`captured ${captured.length}/${TARGET_UPDATES} (ts ${msg.parsed?.timestampUs})`);
   if (captured.length >= TARGET_UPDATES) done();
 });
 
