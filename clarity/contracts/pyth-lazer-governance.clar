@@ -22,6 +22,10 @@
 ;;      EVM contract's updateTrustedSigner authority) instead of a Stacks-principal admin.
 ;;   6. Timelock / delay on sensitive changes (trusted-signer rotation, fee hikes, upgrades).
 
+;; The decoder interface, imported so `set-decoder` can take a `<decoder-trait>` and
+;; reject a non-conforming principal at the type level (see set-decoder).
+(use-trait decoder-trait .pyth-lazer-traits.decoder-trait)
+
 ;;;; Constants
 
 ;; Caller is not the contract admin
@@ -110,14 +114,19 @@
 		(print { type: "stale-price-threshold", action: "updated", data: seconds })
 		(ok true)))
 
-;; Bless a new decoder the oracle will accept (PLAN 6.4). Defaults to the v1
-;; decoder; call this to upgrade to a decoder-v2.
-(define-public (set-decoder (new-decoder principal))
+;; Bless a new decoder the oracle will accept (PLAN 6.4). Defaults to the v1 decoder;
+;; call this to upgrade to a decoder-v2. Takes a `<decoder-trait>` rather than a bare
+;; principal so the type system guarantees the blessed contract actually implements
+;; the decoder interface -- a fat-fingered non-decoder principal cannot be blessed
+;; (which would otherwise brick `verify-and-update-price-feeds`). The principal is
+;; stored via `contract-of`; the oracle compares `(contract-of <passed-decoder>)` to it.
+(define-public (set-decoder (new-decoder <decoder-trait>))
 	(begin
 		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
-		(var-set decoder new-decoder)
-		(print { type: "decoder", action: "updated", data: new-decoder })
-		(ok true)))
+		(let ((new-principal (contract-of new-decoder)))
+			(var-set decoder new-principal)
+			(print { type: "decoder", action: "updated", data: new-principal })
+			(ok true))))
 
 ;; Set the per-update fee (microSTX). Section 7: occasional admin tuning.
 (define-public (set-fee (new-fee uint))

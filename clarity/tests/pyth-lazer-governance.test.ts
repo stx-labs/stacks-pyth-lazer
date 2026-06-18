@@ -89,14 +89,19 @@ describe("pyth-lazer-governance: blessed decoder", () => {
       .toBePrincipal(`${deployer}.pyth-lazer-decoder-v1`);
   });
 
-  it("lets the admin re-point the decoder", () => {
-    const set = simnet.callPublicFn(GOV, "set-decoder", [Cl.principal(wallet1)], deployer);
+  it("lets the admin set the blessed decoder to a conforming contract", () => {
+    // set-decoder takes a <decoder-trait>, so the target must implement the interface;
+    // the only one here is v1, so this re-blesses the default (a real upgrade is a -v2).
+    const v1 = Cl.contractPrincipal(deployer, "pyth-lazer-decoder-v1");
+    const set = simnet.callPublicFn(GOV, "set-decoder", [v1], deployer);
     expect(set.result).toBeOk(Cl.bool(true));
-    expect(simnet.callReadOnlyFn(GOV, "get-decoder", [], deployer).result).toBePrincipal(wallet1);
+    expect(simnet.callReadOnlyFn(GOV, "get-decoder", [], deployer).result)
+      .toBePrincipal(`${deployer}.pyth-lazer-decoder-v1`);
   });
 
   it("rejects a non-admin trying to set the decoder", () => {
-    const { result } = simnet.callPublicFn(GOV, "set-decoder", [Cl.principal(wallet1)], wallet1);
+    const v1 = Cl.contractPrincipal(deployer, "pyth-lazer-decoder-v1");
+    const { result } = simnet.callPublicFn(GOV, "set-decoder", [v1], wallet1);
     expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
 });
