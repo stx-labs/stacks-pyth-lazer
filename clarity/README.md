@@ -19,7 +19,7 @@ The oracle verifies it through the decoder — signer recovery, trusted-signer c
 | `pyth-lazer-decoder-v1` | **swappable** | Parse message, verify signature |
 | `pyth-lazer-storage` | immutable | Permanent price storage |
 | `pyth-lazer-oracle-v1` | thin / stable | Entry point for submitting updates |
-| `pyth-lazer-governance` | immutable | Admin, trusted signers, fee, stale threshold |
+| `pyth-lazer-governance` | immutable | Roles (governance/pause), trusted signers, fee, stale threshold |
 
 Design principle — **upgrade the logic, not the state**: only the decoder and oracle carry a `-vN` suffix and are swappable; the substrate (`-traits`, `-storage`, `-governance`) is unversioned so its addresses never move. See [`PLAN.md`](./PLAN.md) §6.4.
 

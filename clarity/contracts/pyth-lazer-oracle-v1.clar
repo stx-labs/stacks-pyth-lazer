@@ -6,10 +6,11 @@
 ;; trait param and validates it against governance's blessed decoder. Relayers call
 ;; here; consumers READ storage directly, so this contract exposes no reads.
 ;;
-;; `verify-and-update-price-feeds`: assert the passed decoder is the blessed one ->
-;; decode + verify (signature, trusted signer, parse) -> map feeds to storage records
-;; (requiring price/exponent/publisher-count, threading publish-time/channel) -> write
-;; (storage runs the monotonic guard) -> charge the fee. Any step failing reverts.
+;; `verify-and-update-price-feeds`: reject if the protocol is paused -> assert the passed
+;; decoder is the blessed one -> decode + verify (signature, trusted signer, parse) ->
+;; map feeds to storage records (requiring price/exponent/publisher-count, threading
+;; publish-time/channel) -> write (storage runs the monotonic guard) -> charge the fee.
+;; Any step failing reverts.
 
 (use-trait decoder-trait .pyth-lazer-traits.decoder-trait)
 
@@ -22,6 +23,8 @@
 
 (define-public (verify-and-update-price-feeds (update (buff 8192)) (decoder <decoder-trait>))
 	(begin
+		;; Reject while the protocol is paused (governance's emergency stop).
+		(try! (contract-call? .pyth-lazer-governance assert-active))
 		;; The passed decoder must be the one governance has blessed (PLAN 6.4).
 		(asserts! (is-eq (contract-of decoder) (contract-call? .pyth-lazer-governance get-decoder))
 			ERR_INVALID_DECODER)
@@ -111,10 +114,10 @@
 
 ;;;; Fee
 
-;; Charge the per-update fee (default u0) from the relayer (tx-sender) to the admin.
-;; `stx-transfer?` rejects a zero amount, so guard on it.
+;; Charge the per-update fee (default u0) from the relayer (tx-sender) to governance's
+;; fee recipient. `stx-transfer?` rejects a zero amount, so guard on it.
 (define-private (charge-fee)
 	(let ((fee (contract-call? .pyth-lazer-governance get-fee)))
 		(if (> fee u0)
-			(stx-transfer? fee tx-sender (contract-call? .pyth-lazer-governance get-admin))
+			(stx-transfer? fee tx-sender (contract-call? .pyth-lazer-governance get-fee-recipient))
 			(ok true))))

@@ -10,8 +10,8 @@ import {
 } from "./helpers";
 
 const accounts = simnet.getAccounts();
-const deployer = accounts.get("deployer")!; // also the default admin + fee recipient
-const wallet1 = accounts.get("wallet_1")!; // a relayer (not the admin)
+const deployer = accounts.get("deployer")!; // holds both roles + is the default fee recipient
+const wallet1 = accounts.get("wallet_1")!; // a relayer (holds no roles)
 
 const ORACLE = "pyth-lazer-oracle-v1";
 const GOV = "pyth-lazer-governance";
@@ -22,10 +22,11 @@ const FAR_FUTURE = 100_000_000_000n;
 const TS = 1_700_000_000_000_000n; // microseconds
 const REAL_TIME = 1;
 
-// Error codes propagated from the decoder / storage
+// Error codes propagated from the decoder / storage / governance
 const ERR_UNTRUSTED_SIGNER = 2105;
 const ERR_UNAUTHORIZED = 3001; // storage's write gate
 const ERR_PRICE_FEED_NOT_FOUND = 3003; // storage: no record for the feed
+const ERR_PAUSED = 4004; // governance: protocol paused
 
 const decoderRef = Cl.contractPrincipal(deployer, DECODER_NAME);
 
@@ -122,7 +123,16 @@ describe("pyth-lazer-oracle-v1: verify-and-update-price-feeds", () => {
     expect(getPrice(2)).toBeErr(Cl.uint(ERR_PRICE_FEED_NOT_FOUND));
   });
 
-  it("charges the per-update fee from the relayer to the admin", () => {
+  it("rejects updates while the protocol is paused, then resumes after unpause", () => {
+    bootstrap();
+    simnet.callPublicFn(GOV, "pause", [], deployer); // deployer holds the pause role
+    expect(submit(makeUpdate([feed(1, 1n, 0n, 1n, 5n)])).result).toBeErr(Cl.uint(ERR_PAUSED));
+
+    simnet.callPublicFn(GOV, "unpause", [], deployer);
+    expect(submit(makeUpdate([feed(1, 1n, 0n, 1n, 5n)])).result).toBeOk(Cl.uint(1));
+  });
+
+  it("charges the per-update fee from the relayer to the fee recipient", () => {
     bootstrap();
     simnet.callPublicFn(GOV, "set-fee", [Cl.uint(1000n)], deployer);
 
