@@ -79,11 +79,14 @@
 
 ;;;; Admin functions
 ;;
-;; All admin gates check `contract-caller`, not `tx-sender`: a `tx-sender` gate would
-;; pass if the admin were phished into calling a malicious wrapper (the tx.origin
-;; pattern) -- catastrophic, since set-trusted-signers could inject an attacker's
-;; signer. `contract-caller` requires the admin to call directly, and also lets a
-;; multisig/DAO/timelock contract hold admin (TODO 2/3/6).
+;; Every admin gate is `(try! (assert-admin))`. assert-admin checks `contract-caller`,
+;; not `tx-sender`: a `tx-sender` gate would pass if the admin were phished into calling
+;; a malicious wrapper (the tx.origin pattern) -- catastrophic, since set-trusted-signers
+;; could inject an attacker's signer. `contract-caller` requires the admin to call
+;; directly, and also lets a multisig/DAO/timelock contract hold admin (TODO 2/3/6).
+;; (A private fn preserves contract-caller -- it changes only across contract-call?.)
+(define-private (assert-admin)
+	(ok (asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)))
 
 ;; Replace the full trusted-signer set (pass the new full list to add or remove).
 ;; A per-signer setter (set-trusted-signer pubkey expires-at, expires-at = u0 to
@@ -91,14 +94,14 @@
 (define-public (set-trusted-signers
 		(signers (list 16 { pubkey: (buff 33), expires-at: uint })))
 	(begin
-		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(try! (assert-admin))
 		(var-set trusted-signers signers)
 		(print { type: "trusted-signers", action: "updated", data: signers })
 		(ok true)))
 
 (define-public (set-admin (new-admin principal))
 	(begin
-		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(try! (assert-admin))
 		(var-set contract-admin new-admin)
 		(print { type: "admin", action: "updated", data: new-admin })
 		(ok true)))
@@ -106,7 +109,7 @@
 ;; Override the staleness window (seconds). Section 7: occasional admin tuning.
 (define-public (set-stale-price-threshold (seconds uint))
 	(begin
-		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(try! (assert-admin))
 		(var-set stale-price-threshold seconds)
 		(print { type: "stale-price-threshold", action: "updated", data: seconds })
 		(ok true)))
@@ -117,7 +120,7 @@
 ;; `(contract-of new-decoder)`; the oracle compares the passed decoder against it.
 (define-public (set-decoder (new-decoder <decoder-trait>))
 	(begin
-		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(try! (assert-admin))
 		(let ((new-principal (contract-of new-decoder)))
 			(var-set decoder new-principal)
 			(print { type: "decoder", action: "updated", data: new-principal })
@@ -126,7 +129,7 @@
 ;; Set the per-update fee (microSTX). Section 7: occasional admin tuning.
 (define-public (set-fee (new-fee uint))
 	(begin
-		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(try! (assert-admin))
 		(var-set fee new-fee)
 		(print { type: "fee", action: "updated", data: new-fee })
 		(ok true)))
