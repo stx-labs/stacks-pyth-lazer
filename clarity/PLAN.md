@@ -385,7 +385,7 @@ admin `contract-call?`s.
 - `set-fee (...)` — change the per-update fee (default `u0`).
 - `set-stale-price-threshold (seconds uint)` — override the default staleness window.
 - `set-admin` / two-step handoff — reassign admin to a multisig/DAO (§6a).
-- `set-decoder (principal)` (governance) — bless a new `decoder-v2`; relayers then pass it.
+- `set-decoder (<decoder-trait>)` (governance) — bless a new `decoder-v2`; relayers then pass it.
 - `set-authorized-writer (principal)` (storage) — re-point to a redeployed oracle.
 
 **Usage — anyone (not the admin):**

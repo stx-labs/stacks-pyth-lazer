@@ -12,15 +12,12 @@
 ;; Caller of `write` is not the authorized writer, or a setter caller is not the
 ;; governance admin.
 (define-constant ERR_UNAUTHORIZED (err u3001))
-;; (u3002 retired: writer now has a default, so "no writer configured" is unreachable.)
 ;; No record stored for this feed-id.
 (define-constant ERR_PRICE_FEED_NOT_FOUND (err u3003))
 ;; Stored price is older than the governance staleness window.
 (define-constant ERR_STALE_PRICE (err u3004))
 ;; Could not read wall-clock time from the chain.
 (define-constant ERR_NO_BLOCK_TIME (err u3005))
-;; (u3006 retired: a not-newer entry is now skipped silently -- counted as 0
-;; writes, never surfaced as an error -- so the monotonic guard needs no code.)
 
 ;; Lazer publish-time is microseconds; staleness compares in seconds (decision #3).
 (define-constant MICROS_PER_SECOND u1000000)
@@ -33,20 +30,16 @@
 ;; into storage). Re-point to a redeployed oracle via `set-authorized-writer` (PLAN 6.4, 7).
 (define-data-var authorized-writer principal .pyth-lazer-oracle-v1)
 
-;; feed-id (uint, decision #2) -> price record. The optional/required split is
-;; finalized (Phase 5) against `pyth-lazer-protocol`'s AggregatedPriceFeedData and
-;; confirmed on live BTC/ETH/SOL `evm` updates (tests/fixtures/lazer + golden tests):
-;;   - REQUIRED: `exponent` and `publisher-count` are non-optional in the protocol
-;;     struct (always present). `price` is protocol-optional, but we require it here
-;;     -- a record with no price is useless -- so the ORACLE skips a price-less feed
-;;     (partial success) rather than rejecting the batch. `publish-time` / `channel`
-;;     are supplied by the oracle (decision #3 / 6.3): `publish-time` is the update
-;;     timestamp (microseconds), `channel` is recorded, not enforced.
-;;   - OPTIONAL (protocol `Option<...>`): `confidence`, `best-bid`, `best-ask`,
-;;     `ema-price`, `ema-confidence`, `feed-update-timestamp`. The v1 decoder fills
-;;     confidence / best-bid / best-ask; ema-* and feed-update-timestamp are reserved
-;;     `none` (not in the v1 subscription) so a later decoder can populate them
-;;     without reshaping this IMMUTABLE schema (decision #4 / PLAN 6.4).
+;; feed-id (uint, decision #2) -> price record. Optional/required split mirrors
+;; `pyth-lazer-protocol`'s AggregatedPriceFeedData (verified on live evm updates):
+;;   - REQUIRED `price` / `exponent` / `publisher-count`. Only `price` is protocol-
+;;     optional; the ORACLE skips a price-less feed (partial success) rather than
+;;     rejecting the batch. `publish-time` (update timestamp, microseconds) and
+;;     `channel` are supplied by the oracle; channel is recorded, not enforced.
+;;   - OPTIONAL `confidence` / `best-bid` / `best-ask` / `ema-*` /
+;;     `feed-update-timestamp`. The v1 decoder fills the first three; the rest are
+;;     reserved `none` so a later decoder can populate them without reshaping this
+;;     IMMUTABLE schema.
 (define-map prices uint {
 	price: int,
 	exponent: int,

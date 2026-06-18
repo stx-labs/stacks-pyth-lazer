@@ -12,7 +12,7 @@ import { hexToBytes } from "@noble/hashes/utils";
 //     Single feed, no confidence; staging signer.
 //
 //   PRODUCTION -- a real BTC/ETH/SOL update captured from the live Lazer API
-//     (scripts/gen-lazer-fixture.mjs -> tests/fixtures/lazer/captured-updates.json),
+//     (scripts/gen-lazer-fixture.mjs -> tests/fixtures/captured/),
 //     signed by Pyth's PRODUCTION signer. Multi-feed, with confidence + best-bid/ask
 //     + publisher-count, so it confirms big-endian layout AND closes the multi-feed /
 //     confidence(u64) coverage gaps on real production bytes.

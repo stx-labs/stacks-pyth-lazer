@@ -3,8 +3,8 @@
 Clarity 5 contracts that bring **Pyth Lazer** ("Pyth Pro") signed price feeds to Stacks.
 Successor to [`stacks-pyth-bridge`](../../stacks-pyth-bridge) (Pythnet + Wormhole, deprecated) — simpler: no Wormhole, no Merkle proofs.
 
-> **Status: Phases 1–4 complete** (signatures, payload parsing, storage, oracle + governance).
-> Hardening (5) and deployment (6) remain. Full design and rationale: [`PLAN.md`](./PLAN.md).
+> **Status:** Phases 1–4 complete (signatures, payload parsing, storage, oracle + governance);
+> Phase 5 (hardening) underway; deployment (6) remains. Full design: [`PLAN.md`](./PLAN.md).
 
 ## How it works
 
@@ -25,7 +25,7 @@ Design principle — **upgrade the logic, not the state**: only the decoder and 
 
 ## Clarity version
 
-Built for **Clarity 5**. Spots that would benefit from Clarity 6 (SIP-43: `secp256k1-decompress?`, `ed25519-verify`, variadic `concat`) are marked `;; CLARITY6:` — see [`PLAN.md`](./PLAN.md) §4.1.
+Built for **Clarity 5**. Spots that would benefit from Clarity 6 (SIP-43: `ed25519-verify`, `secp256k1-decompress?`) are marked `;; CLARITY6:` — see [`PLAN.md`](./PLAN.md) §4.1.
 
 ## Build & test
 

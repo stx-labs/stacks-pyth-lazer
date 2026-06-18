@@ -3,17 +3,13 @@
 ;;
 ;; Thin orchestrator and stable WRITE entry point (PLAN 5, 6.4). Hardcodes
 ;; `.pyth-lazer-storage` and `.pyth-lazer-governance`; takes the `<decoder>` as a
-;; trait param and validates it against governance's blessed decoder; charges the
-;; per-update fee. Relayers call here to submit updates; consumers READ storage
-;; directly (it is the stable read anchor), so this contract exposes no reads.
+;; trait param and validates it against governance's blessed decoder. Relayers call
+;; here; consumers READ storage directly, so this contract exposes no reads.
 ;;
-;; Flow of `verify-and-update-price-feeds`:
-;;   1. assert the passed decoder == governance's blessed decoder (PLAN 6.4);
-;;   2. decode + verify the update (signature, trusted signer, payload parse);
-;;   3. map decoded feeds -> storage records, threading the update's publish-time
-;;      and channel and ENFORCING the required core fields (storage's FIXME);
-;;   4. write to storage (monotonic guard runs there);
-;;   5. charge the fee (default u0). Any step failing reverts the whole tx.
+;; `verify-and-update-price-feeds`: assert the passed decoder is the blessed one ->
+;; decode + verify (signature, trusted signer, parse) -> map feeds to storage records
+;; (requiring price/exponent/publisher-count, threading publish-time/channel) -> write
+;; (storage runs the monotonic guard) -> charge the fee. Any step failing reverts.
 
 (use-trait decoder-trait .pyth-lazer-traits.decoder-trait)
 
@@ -21,10 +17,6 @@
 
 ;; Passed decoder does not match governance's blessed decoder.
 (define-constant ERR_INVALID_DECODER (err u1001))
-;; (u1002 retired: the blessed decoder now has a default, so "no decoder" is unreachable.)
-;; (u1003/u1004/u1005 retired: a feed missing a v1-required field -- price, exponent,
-;; or publisher-count -- is now SKIPPED per-feed (partial success), never surfaced as
-;; an error, so the oracle no longer rejects an update over one missing field.)
 
 ;;;; Write entry point
 

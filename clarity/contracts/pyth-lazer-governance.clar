@@ -79,14 +79,11 @@
 
 ;;;; Admin functions
 ;;
-;; All admin gates check `contract-caller`, NOT `tx-sender`. `tx-sender` is the tx
-;; origin, so a tx-sender gate would pass if the admin were ever induced to call a
-;; malicious intermediary contract that then called these setters (the tx.origin
-;; phishing pattern) -- catastrophic here, since set-trusted-signers could inject an
-;; attacker's signer. `contract-caller` requires the admin to be the DIRECT caller,
-;; which also lets a future multisig/DAO/timelock CONTRACT hold admin and call in
-;; directly (TODO options 2/3/6 above). The admin must therefore call governance
-;; directly, never through an untrusted wrapper.
+;; All admin gates check `contract-caller`, not `tx-sender`: a `tx-sender` gate would
+;; pass if the admin were phished into calling a malicious wrapper (the tx.origin
+;; pattern) -- catastrophic, since set-trusted-signers could inject an attacker's
+;; signer. `contract-caller` requires the admin to call directly, and also lets a
+;; multisig/DAO/timelock contract hold admin (TODO 2/3/6).
 
 ;; Replace the full trusted-signer set (pass the new full list to add or remove).
 ;; A per-signer setter (set-trusted-signer pubkey expires-at, expires-at = u0 to
@@ -114,12 +111,10 @@
 		(print { type: "stale-price-threshold", action: "updated", data: seconds })
 		(ok true)))
 
-;; Bless a new decoder the oracle will accept (PLAN 6.4). Defaults to the v1 decoder;
-;; call this to upgrade to a decoder-v2. Takes a `<decoder-trait>` rather than a bare
-;; principal so the type system guarantees the blessed contract actually implements
-;; the decoder interface -- a fat-fingered non-decoder principal cannot be blessed
-;; (which would otherwise brick `verify-and-update-price-feeds`). The principal is
-;; stored via `contract-of`; the oracle compares `(contract-of <passed-decoder>)` to it.
+;; Bless a new decoder the oracle will accept (PLAN 6.4); call this to upgrade to a
+;; decoder-v2. Takes a `<decoder-trait>` (not a bare principal) so the type system
+;; rejects blessing a non-decoder, which would otherwise brick the oracle. Stores
+;; `(contract-of new-decoder)`; the oracle compares the passed decoder against it.
 (define-public (set-decoder (new-decoder <decoder-trait>))
 	(begin
 		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
