@@ -1,0 +1,90 @@
+// Measure execution costs of the oracle hot paths against REAL captured updates,
+// and express them as a fraction of a Stacks block budget. Reproducible input for
+// docs/cost-review.md. Run from the clarity/ workspace:
+//
+//   node scripts/measure-costs.mjs
+//
+// Uses two real PROD-signed fixtures: a 3-feed crypto update and a 16-feed equity
+// update. Two feed counts give a linear model (fixed overhead + per-feed cost).
+import { initSimnet } from "@stacks/clarinet-sdk";
+import { Cl } from "@stacks/transactions";
+import { hexToBytes } from "@noble/hashes/utils";
+import { readFileSync } from "node:fs";
+
+const PROD_SIGNER = "03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b";
+const FAR_FUTURE = 100_000_000_000n;
+const DECODER = "pyth-lazer-decoder-v1";
+const ORACLE = "pyth-lazer-oracle-v1";
+const GOV = "pyth-lazer-governance";
+
+const simnet = await initSimnet("Clarinet.toml", false, { trackCosts: true });
+const accounts = simnet.getAccounts();
+const deployer = accounts.get("deployer");
+const relayer = accounts.get("wallet_1");
+
+// Trust Pyth's production signer (all captured fixtures are signed by it).
+simnet.callPublicFn(
+  GOV,
+  "set-trusted-signers",
+  [Cl.list([Cl.tuple({ pubkey: Cl.buffer(hexToBytes(PROD_SIGNER)), "expires-at": Cl.uint(FAR_FUTURE) })])],
+  deployer,
+);
+const decoderRef = Cl.contractPrincipal(deployer, DECODER);
+
+const load = (f) => JSON.parse(readFileSync(`tests/fixtures/captured/${f}`, "utf8"));
+const f3 = load("1781553346950000.json"); // 3 feeds (BTC/ETH/SOL), channel 1
+const f16 = load("1781725663200000.json"); // 16 feeds (equity), channel 3
+const nF3 = f3.parsed.priceFeeds.length;
+const nF16 = f16.parsed.priceFeeds.length;
+
+const updBuf = (f) => Cl.buffer(hexToBytes(f.evmHex));
+// NOTE: read-only calls (recover-signer / decode-payload) carry no cost report --
+// the SDK only meters transactions -- so we measure the two PUBLIC entry points. The
+// decode-and-verify linear model's fixed term captures the signature+header cost.
+
+const measurements = [];
+function measure(label, res) {
+  if (!res.costs) throw new Error(`${label}: no costs (result ${JSON.stringify(res.result)})`);
+  if (res.result.type !== "ok") throw new Error(`${label}: not ok -> ${JSON.stringify(res.result)}`);
+  measurements.push({ label, t: res.costs.total, limit: res.costs.limit });
+  return res;
+}
+
+// full decode-and-verify (signature + trust + parse)
+measure(`decode-and-verify (${nF3} feeds)`, simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f3)], deployer));
+measure(`decode-and-verify (${nF16} feeds)`, simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f16)], deployer));
+// end-to-end oracle submit (verify + parse + storage write + fee path) -- the relayer's tx
+measure(`verify-and-update END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [updBuf(f3), decoderRef], relayer));
+measure(`verify-and-update END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [updBuf(f16), decoderRef], relayer));
+
+const limit = measurements[0].limit;
+const dims = [
+  ["runtime", "runtime"],
+  ["readCount", "read_cnt"],
+  ["readLength", "read_len"],
+  ["writeCount", "write_cnt"],
+  ["writeLength", "write_len"],
+];
+
+const pad = (s, n) => String(s).padStart(n);
+console.log(`\nBlock budget (limit): runtime=${limit.runtime}  readCount=${limit.readCount}  readLength=${limit.readLength}  writeCount=${limit.writeCount}  writeLength=${limit.writeLength}\n`);
+console.log(`${"operation".padEnd(38)}${dims.map(([, h]) => pad(h, 12)).join("")}`);
+for (const m of measurements) {
+  console.log(`${m.label.padEnd(38)}${dims.map(([k]) => pad(m.t[k], 12)).join("")}`);
+}
+
+// % of a block for the end-to-end 16-feed submit (the worst-case relayer tx)
+const e2e16 = measurements.find((m) => m.label.startsWith("verify-and-update END-TO-END (" + nF16)).t;
+console.log(`\nEnd-to-end ${nF16}-feed submit as a fraction of one block:`);
+for (const [k, h] of dims) console.log(`  ${h.padEnd(10)} ${(100 * e2e16[k] / limit[k]).toFixed(4)}%`);
+const perBlock = Math.floor(limit.runtime / e2e16.runtime);
+console.log(`  -> runtime is the binding dimension; ~${perBlock} such submits would fill a block's runtime`);
+
+// linear model from the two decode-and-verify points
+const dv3 = measurements.find((m) => m.label === `decode-and-verify (${nF3} feeds)`).t;
+const dv16 = measurements.find((m) => m.label === `decode-and-verify (${nF16} feeds)`).t;
+const perFeed = (dv16.runtime - dv3.runtime) / (nF16 - nF3);
+const overhead = dv3.runtime - perFeed * nF3;
+console.log(`\ndecode-and-verify runtime linear model: ~${Math.round(overhead)} fixed (signature+header) + ~${Math.round(perFeed)} per feed`);
+
+process.exit(0);

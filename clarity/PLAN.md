@@ -465,10 +465,11 @@ Each phase is independently reviewable/mergeable.
   `set-trusted-signers`.)_
 - **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests,
   fuzz the parser against the Rust/JS SDK output, audit prep.
-  - ✅ **Cost/gas review** ([`docs/cost-review.md`](./docs/cost-review.md)): a max 16-feed update is
-    0.64% of block runtime (the binding dimension), ~156 such updates/block; all other dimensions
-    <0.4%. Parser dominates and scales ~linearly per feed (~1.9M runtime/feed); secp256k1 recovery
-    is negligible (~39K). No optimization required.
+  - ✅ **Cost/gas review** ([`docs/cost-review.md`](./docs/cost-review.md), measured 2026-06-17,
+    reproduce with `scripts/measure-costs.mjs`): a max 16-feed update submitted end-to-end is
+    ~0.92% of block runtime (the binding dimension), ~108 such updates/block; all other dimensions
+    <0.4%. Parser dominates and scales ~linearly (~2.5M runtime/feed) over a ~1.8M fixed
+    signature+header overhead. No optimization required.
   - ✅ **Byte order validated against a real Lazer `evm` fixture** (the open item from Phase 2):
     `tests/pyth-lazer-golden-fixture.test.ts` decodes an upstream `PythLazer.t.sol` v0.1.1 vector
     end-to-end (envelope + secp256k1 recovery + big-endian payload) to Pyth's own asserted values.
@@ -479,13 +480,12 @@ Each phase is independently reviewable/mergeable.
     (the two protocol non-`Option` fields); OPTIONAL `confidence`, `best-bid`, `best-ask`, `ema-*`,
     `feed-update-timestamp`. Storage stays permissive (immutable); "required" lives in the
     redeployable oracle. The immutable trait mirrors the full field vocabulary.
-  - ✅ **Confidence(u64) width + multi-feed on real bytes**: a real 3-feed production update
-    (`tests/fixtures/lazer/captured-updates.json`) is a second golden vector in
-    `tests/pyth-lazer-golden-fixture.test.ts`, decoding to the SDK's own values.
+  - ✅ **Confidence(u64) width + multi-feed on real bytes**: real production updates
+    (`tests/fixtures/captured/*.json`, captured + screened across asset types) are decoded against
+    the SDK's own values in `tests/fixtures.test.ts`; the golden test also pins an inline PROD vector.
   - Production trusted signer observed: compressed pubkey
     `0x03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b` (it rotates via Pyth DAO --
-    re-confirm at deploy, PLAN 10). NOTE: re-run the cost review -- the decoder now persists three
-    more properties per feed (best-bid/ask + publisher-count), so `docs/cost-review.md` is stale.
+    re-confirm at deploy, PLAN 10).
 - **Phase 6 — deployment.** Testnet deploy + plan, a worked consumer example (port the
   `example/cbtc` integration), mainnet deployment plan, README with addresses.
 
