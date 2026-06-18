@@ -165,14 +165,15 @@
 				ema-confidence: (optional uint), feed-update-timestamp: (optional uint) }) } uint)))
 	(match acc
 		state
-			(if (is-eq (get remaining state) u0)
-				acc
-				(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state)))))
-					(ok (merge state {
-						offset: (get offset parsed),
-						remaining: (- (get remaining state) u1),
-						;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant.
-						feeds: (unwrap-panic (as-max-len? (append (get feeds state) (get feed parsed)) u16)) }))))
+			(let ((remaining (get remaining state))) ;; read on both the guard and the decrement
+				(if (is-eq remaining u0)
+					acc
+					(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state)))))
+						(ok (merge state {
+							offset: (get offset parsed),
+							remaining: (- remaining u1),
+							;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant.
+							feeds: (unwrap-panic (as-max-len? (append (get feeds state) (get feed parsed)) u16)) })))))
 		e (err e)))
 
 ;; Parse one feed (feed-id, num-properties, then its properties). Returns the
@@ -206,16 +207,20 @@
 			publisher-count: (optional uint), best-bid: (optional int), best-ask: (optional int) } uint)))
 	(match acc
 		state
-			(if (is-eq (get remaining state) u0)
-				acc
-				(let ((bytes (get bytes state))
-						(off (get offset state))
-						(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA)))
-					(asserts! (<= ptype MAX_PROPERTY_TYPE) ERR_UNKNOWN_PROPERTY)
-					(let ((advanced (try! (set-property-field ptype bytes (+ off u1) state))))
-						(ok (merge advanced {
-							offset: (+ off u1 (property-width ptype)),
-							remaining: (- (get remaining state) u1) })))))
+			;; `remaining` is read on both the guard and the decrement; bind it once.
+			;; `bytes`/`off` are bound only inside the active branch, so the no-op tail
+			;; iterations (remaining = 0) never pay to extract the payload buffer.
+			(let ((remaining (get remaining state)))
+				(if (is-eq remaining u0)
+					acc
+					(let ((bytes (get bytes state))
+							(off (get offset state))
+							(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA)))
+						(asserts! (<= ptype MAX_PROPERTY_TYPE) ERR_UNKNOWN_PROPERTY)
+						(let ((advanced (try! (set-property-field ptype bytes (+ off u1) state))))
+							(ok (merge advanced {
+								offset: (+ off u1 (property-width ptype)),
+								remaining: (- remaining u1) }))))))
 		e (err e)))
 
 ;; Lazer's `evm` encoding has no Option type, so the reference PythLazerLib
