@@ -74,6 +74,15 @@
 	(var-get fee))
 
 ;;;; Admin functions
+;;
+;; All admin gates check `contract-caller`, NOT `tx-sender`. `tx-sender` is the tx
+;; origin, so a tx-sender gate would pass if the admin were ever induced to call a
+;; malicious intermediary contract that then called these setters (the tx.origin
+;; phishing pattern) -- catastrophic here, since set-trusted-signers could inject an
+;; attacker's signer. `contract-caller` requires the admin to be the DIRECT caller,
+;; which also lets a future multisig/DAO/timelock CONTRACT hold admin and call in
+;; directly (TODO options 2/3/6 above). The admin must therefore call governance
+;; directly, never through an untrusted wrapper.
 
 ;; Replace the full trusted-signer set (pass the new full list to add or remove).
 ;; A per-signer setter (set-trusted-signer pubkey expires-at, expires-at = u0 to
@@ -81,14 +90,14 @@
 (define-public (set-trusted-signers
 		(signers (list 16 { pubkey: (buff 33), expires-at: uint })))
 	(begin
-		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
 		(var-set trusted-signers signers)
 		(print { type: "trusted-signers", action: "updated", data: signers })
 		(ok true)))
 
 (define-public (set-admin (new-admin principal))
 	(begin
-		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
 		(var-set contract-admin new-admin)
 		(print { type: "admin", action: "updated", data: new-admin })
 		(ok true)))
@@ -96,7 +105,7 @@
 ;; Override the staleness window (seconds). Section 7: occasional admin tuning.
 (define-public (set-stale-price-threshold (seconds uint))
 	(begin
-		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
 		(var-set stale-price-threshold seconds)
 		(print { type: "stale-price-threshold", action: "updated", data: seconds })
 		(ok true)))
@@ -105,7 +114,7 @@
 ;; decoder; call this to upgrade to a decoder-v2.
 (define-public (set-decoder (new-decoder principal))
 	(begin
-		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
 		(var-set decoder new-decoder)
 		(print { type: "decoder", action: "updated", data: new-decoder })
 		(ok true)))
@@ -113,7 +122,7 @@
 ;; Set the per-update fee (microSTX). Section 7: occasional admin tuning.
 (define-public (set-fee (new-fee uint))
 	(begin
-		(asserts! (is-eq tx-sender (var-get contract-admin)) ERR_UNAUTHORIZED)
+		(asserts! (is-eq contract-caller (var-get contract-admin)) ERR_UNAUTHORIZED)
 		(var-set fee new-fee)
 		(print { type: "fee", action: "updated", data: new-fee })
 		(ok true)))

@@ -151,10 +151,12 @@
 ;;;; Admin (governance admin only -- single admin principal, decision #1)
 
 ;; Re-point storage at a redeployed oracle. Gated by governance's admin so the
-;; whole system shares one admin (decision #1).
+;; whole system shares one admin (decision #1). Checks `contract-caller` (not
+;; `tx-sender`) so the admin must call directly -- avoids the tx.origin phishing
+;; vector and lets a contract (multisig/DAO) hold admin (matches governance's gates).
 (define-public (set-authorized-writer (new-writer principal))
 	(begin
-		(asserts! (is-eq tx-sender (contract-call? .pyth-lazer-governance get-admin)) ERR_UNAUTHORIZED)
+		(asserts! (is-eq contract-caller (contract-call? .pyth-lazer-governance get-admin)) ERR_UNAUTHORIZED)
 		(var-set authorized-writer new-writer)
 		(print { type: "authorized-writer", action: "updated", data: new-writer })
 		(ok true)))
