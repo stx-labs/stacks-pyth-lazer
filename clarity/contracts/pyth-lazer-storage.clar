@@ -151,5 +151,5 @@
 	(begin
 		(asserts! (is-eq contract-caller (contract-call? .pyth-lazer-governance get-admin)) ERR_UNAUTHORIZED)
 		(var-set authorized-writer new-writer)
-		(print { type: "authorized-writer", action: "updated", data: new-writer })
+		(print { type: "authorized-writer", action: "updated", data: { new-writer: new-writer } })
 		(ok true)))

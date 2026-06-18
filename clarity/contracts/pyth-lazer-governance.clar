@@ -96,14 +96,14 @@
 	(begin
 		(try! (assert-admin))
 		(var-set trusted-signers signers)
-		(print { type: "trusted-signers", action: "updated", data: signers })
+		(print { type: "trusted-signers", action: "updated", data: { signers: signers } })
 		(ok true)))
 
 (define-public (set-admin (new-admin principal))
 	(begin
 		(try! (assert-admin))
 		(var-set contract-admin new-admin)
-		(print { type: "admin", action: "updated", data: new-admin })
+		(print { type: "admin", action: "updated", data: { new-admin: new-admin } })
 		(ok true)))
 
 ;; Override the staleness window (seconds). Section 7: occasional admin tuning.
@@ -111,7 +111,7 @@
 	(begin
 		(try! (assert-admin))
 		(var-set stale-price-threshold seconds)
-		(print { type: "stale-price-threshold", action: "updated", data: seconds })
+		(print { type: "stale-price-threshold", action: "updated", data: { seconds: seconds } })
 		(ok true)))
 
 ;; Bless a new decoder the oracle will accept (PLAN 6.4); call this to upgrade to a
@@ -123,7 +123,7 @@
 		(try! (assert-admin))
 		(let ((new-principal (contract-of new-decoder)))
 			(var-set decoder new-principal)
-			(print { type: "decoder", action: "updated", data: new-principal })
+			(print { type: "decoder", action: "updated", data: { new-decoder: new-principal } })
 			(ok true))))
 
 ;; Set the per-update fee (microSTX). Section 7: occasional admin tuning.
@@ -131,5 +131,5 @@
 	(begin
 		(try! (assert-admin))
 		(var-set fee new-fee)
-		(print { type: "fee", action: "updated", data: new-fee })
+		(print { type: "fee", action: "updated", data: { new-fee: new-fee } })
 		(ok true)))
