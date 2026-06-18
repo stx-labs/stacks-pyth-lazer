@@ -208,11 +208,13 @@
 		state
 			(if (is-eq (get remaining state) u0)
 				acc
-				(let ((ptype (unwrap! (read-uint-be? (get bytes state) (get offset state) u1) ERR_INVALID_FEED_DATA)))
+				(let ((bytes (get bytes state))
+						(off (get offset state))
+						(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA)))
 					(asserts! (<= ptype MAX_PROPERTY_TYPE) ERR_UNKNOWN_PROPERTY)
-					(let ((advanced (try! (set-property-field ptype (get bytes state) (+ (get offset state) u1) state))))
+					(let ((advanced (try! (set-property-field ptype bytes (+ off u1) state))))
 						(ok (merge advanced {
-							offset: (+ (get offset state) u1 (property-width ptype)),
+							offset: (+ off u1 (property-width ptype)),
 							remaining: (- (get remaining state) u1) })))))
 		e (err e)))
 

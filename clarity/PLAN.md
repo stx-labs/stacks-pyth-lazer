@@ -465,11 +465,12 @@ Each phase is independently reviewable/mergeable.
   `set-trusted-signers`.)_
 - **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests,
   fuzz the parser against the Rust/JS SDK output, audit prep.
-  - ✅ **Cost/gas review** ([`docs/cost-review.md`](./docs/cost-review.md), measured 2026-06-17,
+  - ✅ **Cost/gas review** ([`docs/cost-review.md`](./docs/cost-review.md), measured 2026-06-18,
     reproduce with `scripts/measure-costs.mjs`): a max 16-feed update submitted end-to-end is
-    ~0.92% of block runtime (the binding dimension), ~108 such updates/block; all other dimensions
-    <0.4%. Parser dominates and scales ~linearly (~2.5M runtime/feed) over a ~1.8M fixed
-    signature+header overhead. No optimization required.
+    ~0.82% of block runtime (the binding dimension), ~122 such updates/block; all other dimensions
+    <0.4%. Parser dominates and scales ~linearly (~2.2M runtime/feed) over a ~1.7M fixed
+    signature+header overhead. A per-property single-`get` fix trimmed per-feed runtime ~12%;
+    no further optimization required.
   - ✅ **Byte order validated against a real Lazer `evm` fixture** (the open item from Phase 2):
     `tests/pyth-lazer-golden-fixture.test.ts` decodes an upstream `PythLazer.t.sol` v0.1.1 vector
     end-to-end (envelope + secp256k1 recovery + big-endian payload) to Pyth's own asserted values.
