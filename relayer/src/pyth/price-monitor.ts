@@ -1,15 +1,17 @@
 import { logger } from '@stacks/api-toolkit';
 import {
   PythLazerClient,
+  type Channel,
   type JsonOrBinaryResponse,
   type ParsedPayload,
 } from '@pythnetwork/pyth-lazer-sdk';
 import { LRUCache } from 'lru-cache';
 import { ENV } from '../env.ts';
+import { parsePythLazerChannel } from './helpers.ts';
 
 /** An entry tracked in the LRU cache, one per monitored pair. */
 export interface MonitoredPair {
-  /** Pyth Lazer symbol, e.g. `BTC/USD`. */
+  /** Pyth Lazer symbol, e.g. `Crypto.BTC/USD`. */
   symbol: string;
   /** Lazer subscription id assigned to this pair. */
   subscriptionId: number;
@@ -29,6 +31,7 @@ const DEFAULT_SYMBOLS = ['Crypto.BTC/USD', 'Crypto.STX/USD', 'Crypto.USDC/USD'];
  */
 export class PriceMonitor {
   private pythClient?: PythLazerClient;
+  private channel: Channel;
   /** Monitored pairs keyed by symbol. Eviction unsubscribes from the stream. */
   private readonly symbolCache: LRUCache<string, MonitoredPair>;
   /** Reverse index from subscription id to symbol, for routing incoming messages. */
@@ -37,11 +40,12 @@ export class PriceMonitor {
   private nextSubscriptionId = 1;
 
   constructor() {
+    this.channel = parsePythLazerChannel(ENV.PRICE_MONITOR_PYTH_LAZER_CHANNEL);
     this.symbolCache = new LRUCache<string, MonitoredPair>({
       max: ENV.PRICE_MONITOR_CACHE_MAX,
       dispose: entry => {
         logger.debug(`[PriceMonitor] evicting symbol ${entry.symbol} from cache`);
-        this.unsubscribe(entry.subscriptionId);
+        this.teardownSubscription(entry.subscriptionId);
       },
     });
     // Add the default symbols to the cache. The subscriptions will be created lazily when the
@@ -61,7 +65,7 @@ export class PriceMonitor {
     }
 
     logger.info(
-      `[PriceMonitor] connecting to Pyth Lazer channel ${ENV.PRICE_MONITOR_PYTH_LAZER_CHANNEL}`
+      `[PriceMonitor] connecting to Pyth Lazer channel ${this.channel}`
     );
     this.pythClient = await PythLazerClient.create({
       token: ENV.PYTH_API_KEY,
@@ -89,7 +93,7 @@ export class PriceMonitor {
     });
 
     // Resume subscriptions to all symbols in the cache.
-    for (const symbol of this.symbolCache.keys()) {
+    for (const symbol of this.subscriptions.values()) {
       this.subscribeToSymbol(symbol);
     }
   }
@@ -133,7 +137,7 @@ export class PriceMonitor {
       this.subscriptions.set(subscriptionId, symbol);
       entry = newEntry;
     }
-    if (this.pythClient) {
+    if (this.pythClient && !entry.subscribed) {
       this.pythClient.subscribe({
         type: 'subscribe',
         subscriptionId: entry.subscriptionId,
@@ -144,7 +148,7 @@ export class PriceMonitor {
         // submission); `parsed` additionally includes human-readable prices.
         deliveryFormat: 'binary',
         parsed: true,
-        channel: ENV.PRICE_MONITOR_PYTH_LAZER_CHANNEL,
+        channel: this.channel,
       });
       entry.subscribed = true;
       logger.info(
@@ -155,16 +159,21 @@ export class PriceMonitor {
   }
 
   /**
-   * Unsubscribes from a subscription and removes the symbol from the cache.
-   * @param subscriptionId - The subscription id to unsubscribe from.
+   * Tears down a single subscription: stops the server-side stream and drops the
+   * reverse index. Invoked by the cache's `dispose` hook, so it must not call
+   * back into the cache (that would re-enter `dispose`). To remove a monitored
+   * symbol programmatically, call `symbolCache.delete(symbol)` and let `dispose`
+   * run this.
+   * @param subscriptionId - The subscription id to tear down.
    */
-  private unsubscribe(subscriptionId: number): void {
+  private teardownSubscription(subscriptionId: number): void {
     this.pythClient?.unsubscribe(subscriptionId);
     const symbol = this.subscriptions.get(subscriptionId);
-    if (!symbol) return;
     this.subscriptions.delete(subscriptionId);
-    this.symbolCache.delete(symbol);
-    logger.info({ subscriptionId, symbol }, `[PriceMonitor] unsubscribed from symbol ${symbol}`);
+    logger.info(
+      { subscriptionId, symbol },
+      `[PriceMonitor] unsubscribed from subscription ${subscriptionId}`
+    );
   }
 
   private readonly handleMessage = (event: JsonOrBinaryResponse): void => {
@@ -182,7 +191,7 @@ export class PriceMonitor {
       logger.debug(
         `[PriceMonitor] received message for unknown subscription ${event.value.subscriptionId}, unsubscribing`
       );
-      this.unsubscribe(event.value.subscriptionId);
+      this.teardownSubscription(event.value.subscriptionId);
       return;
     }
 
@@ -192,6 +201,6 @@ export class PriceMonitor {
     // TODO(next step): deviation/heartbeat triggers + on-chain submission using
     // the signed `evm` payload in `event.value.evm`.
     // this.onPriceUpdate?.(symbol, parsed);
-    logger.trace(event.value, '[PriceMonitor] received price update');
+    logger.debug(event.value, '[PriceMonitor] received price update');
   };
 }

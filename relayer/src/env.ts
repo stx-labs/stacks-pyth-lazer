@@ -22,9 +22,9 @@ const schema = Type.Object({
   PRICE_MONITOR_PYTH_LAZER_CHANNEL: Type.Enum(
     {
       real_time: 'real_time',
-      fixed_rate_50ms: 'fixed_rate@50ms',
-      fixed_rate_200ms: 'fixed_rate@200ms',
-      fixed_rate_1000ms: 'fixed_rate@1000ms',
+      fixed_rate_50ms: 'fixed_rate_50ms',
+      fixed_rate_200ms: 'fixed_rate_200ms',
+      fixed_rate_1000ms: 'fixed_rate_1000ms',
     },
     { default: 'fixed_rate_200ms' }
   ),
