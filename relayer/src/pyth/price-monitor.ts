@@ -39,7 +39,10 @@ export class PriceMonitor {
   constructor() {
     this.symbolCache = new LRUCache<string, MonitoredPair>({
       max: ENV.PRICE_MONITOR_CACHE_MAX,
-      dispose: (entry, symbol) => this.disposeSymbol(entry, symbol),
+      dispose: entry => {
+        logger.debug(`[PriceMonitor] evicting symbol ${entry.symbol} from cache`);
+        this.unsubscribe(entry.subscriptionId);
+      },
     });
     // Add the default symbols to the cache. The subscriptions will be created lazily when the
     // client is started.
@@ -152,19 +155,16 @@ export class PriceMonitor {
   }
 
   /**
-   * LRU dispose hook: unsubscribe from the symbol when evicted.
-   * @param entry - The cached entry for the symbol.
-   * @param symbol - The symbol to unsubscribe from.
+   * Unsubscribes from a subscription and removes the symbol from the cache.
+   * @param subscriptionId - The subscription id to unsubscribe from.
    */
-  private disposeSymbol(entry: MonitoredPair, symbol: string): void {
-    if (this.pythClient) {
-      this.pythClient.unsubscribe(entry.subscriptionId);
-    }
-    this.subscriptions.delete(entry.subscriptionId);
-    logger.info(
-      { subscriptionId: entry.subscriptionId, symbol },
-      `[PriceMonitor] evicted symbol ${symbol} and unsubscribed`
-    );
+  private unsubscribe(subscriptionId: number): void {
+    this.pythClient?.unsubscribe(subscriptionId);
+    const symbol = this.subscriptions.get(subscriptionId);
+    if (!symbol) return;
+    this.subscriptions.delete(subscriptionId);
+    this.symbolCache.delete(symbol);
+    logger.info({ subscriptionId, symbol }, `[PriceMonitor] unsubscribed from symbol ${symbol}`);
   }
 
   private readonly handleMessage = (event: JsonOrBinaryResponse): void => {
@@ -178,13 +178,20 @@ export class PriceMonitor {
     if (!parsed) return;
 
     const symbol = this.subscriptions.get(event.value.subscriptionId);
-    if (!symbol) return; // update for a symbol we no longer track
+    if (!symbol) {
+      logger.debug(
+        `[PriceMonitor] received message for unknown subscription ${event.value.subscriptionId}, unsubscribing`
+      );
+      this.unsubscribe(event.value.subscriptionId);
+      return;
+    }
 
-    const entry = this.symbolCache.get(symbol);
+    const entry = this.symbolCache.peek(symbol);
     if (entry) entry.lastUpdate = parsed;
 
     // TODO(next step): deviation/heartbeat triggers + on-chain submission using
     // the signed `evm` payload in `event.value.evm`.
     // this.onPriceUpdate?.(symbol, parsed);
+    logger.trace(event.value, '[PriceMonitor] received price update');
   };
 }
