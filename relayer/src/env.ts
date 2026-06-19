@@ -3,17 +3,6 @@ import type { Static } from '@sinclair/typebox';
 import envSchema from 'env-schema';
 
 const schema = Type.Object({
-  /**
-   * Run mode for this service. Allows you to control how the Token Metadata Service runs, typically
-   * in an auto-scaled environment. Available values are:
-   * * `default`: Runs background jobs and the REST API server (this is the default)
-   * * `writeonly`: Runs only background jobs
-   * * `readonly`: Runs only the REST API server
-   */
-  RUN_MODE: Type.Enum(
-    { default: 'default', readonly: 'readonly', writeonly: 'writeonly' },
-    { default: 'default' }
-  ),
   /** Specifies which Stacks network this API is indexing */
   NETWORK: Type.Enum({ mainnet: 'mainnet', testnet: 'testnet' }, { default: 'mainnet' }),
 

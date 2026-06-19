@@ -1,30 +1,33 @@
 import { logger, registerShutdownConfig } from '@stacks/api-toolkit';
 import { buildApiServer } from './api/init.js';
-import { ENV } from './env.ts';
+import { ENV } from './env.js';
+import { PriceMonitor } from './pyth/price-monitor.js';
+import type { ApiConfig } from './api/init.js';
 
 /**
- * Initializes background services. Only for `default` and `writeonly` run modes.
- * @param db - PgStore
+ * Initializes background services.
+ * @param config - API configuration.
  */
-async function initBackgroundServices() {
+async function initBackgroundServices(config: ApiConfig) {
   logger.info('Initializing background services...');
 
-  // const jobQueue = new JobQueue({ db, network: ENV.NETWORK as StacksNetworkName });
-  // registerShutdownConfig({
-  //   name: 'Job Queue',
-  //   forceKillable: true,
-  //   handler: async () => {
-  //     await jobQueue.stop();
-  //   },
-  // });
+  registerShutdownConfig({
+    name: 'Price Monitor',
+    forceKillable: true,
+    handler: async () => {
+      await config.priceMonitor.stop();
+    },
+  });
+  await config.priceMonitor.start();
 }
 
 /**
- * Initializes API service. Only for `default` and `readonly` run modes.
+ * Initializes API service.
+ * @param config - API configuration.
  */
-async function initApiService() {
+async function initApiService(config: ApiConfig) {
   logger.info('Initializing API service...');
-  const apiServer = await buildApiServer();
+  const apiServer = await buildApiServer(config);
   registerShutdownConfig({
     name: 'API Server',
     forceKillable: true,
@@ -35,14 +38,15 @@ async function initApiService() {
   await apiServer.listen({ host: ENV.API_HOST, port: ENV.API_PORT });
 }
 
+/**
+ * Initializes the application.
+ */
 async function initApp() {
-  logger.info(`Initializing in ${ENV.RUN_MODE} run mode...`);
-  if (['default', 'writeonly'].includes(ENV.RUN_MODE)) {
-    await initBackgroundServices();
-  }
-  if (['default', 'readonly'].includes(ENV.RUN_MODE)) {
-    await initApiService();
-  }
+  const config: ApiConfig = {
+    priceMonitor: new PriceMonitor(),
+  };
+  await initBackgroundServices(config);
+  await initApiService(config);
 }
 
 registerShutdownConfig();
