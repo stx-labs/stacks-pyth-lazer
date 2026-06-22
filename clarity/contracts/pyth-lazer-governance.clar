@@ -181,7 +181,9 @@
 	(begin
 		(try! (assert-active))
 		(try! (assert-governance contract-caller))
-		(map-set roles { who: who, role: role } enabled)
+		(if enabled
+			(map-set roles { who: who, role: role } true)
+			(map-delete roles { who: who, role: role }))
 		(print { type: "role", action: "updated", data: { who: who, role: role, enabled: enabled } })
 		(ok true)))
 
