@@ -12,8 +12,9 @@ const GOV = "pyth-lazer-governance";
 const ERR_UNAUTHORIZED = 3001; // storage's `write` gate (not the authorized writer)
 const ERR_PRICE_FEED_NOT_FOUND = 3003;
 const ERR_STALE_PRICE = 3004;
-// set-authorized-writer delegates auth to governance, surfacing its code.
+// set-authorized-writer delegates auth to governance, surfacing its codes.
 const ERR_NOT_GOVERNANCE = 4003;
+const ERR_PAUSED = 4004;
 
 const REAL_TIME = 1; // Channel::RealTime
 const TS = 1_700_000_000_000_000n; // a plausible publish-time, microseconds
@@ -94,6 +95,13 @@ describe("pyth-lazer-storage: authorized-writer", () => {
     authorize(deployer);
     const { result } = write([entry({ feedId: 1, publishTime: TS })], wallet1);
     expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+
+  it("blocks re-pointing the authorized writer while the protocol is paused", () => {
+    // deployer holds both roles, but pause gates the setter (via governance assert-active)
+    simnet.callPublicFn(GOV, "pause", [], deployer);
+    const { result } = simnet.callPublicFn(STORAGE, "set-authorized-writer", [Cl.principal(wallet1)], deployer);
+    expect(result).toBeErr(Cl.uint(ERR_PAUSED));
   });
 });
 

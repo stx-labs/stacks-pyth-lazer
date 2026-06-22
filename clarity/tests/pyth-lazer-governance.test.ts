@@ -98,7 +98,9 @@ describe("pyth-lazer-governance: pause", () => {
     setRole(wallet1, ROLE_PAUSE, true); // wallet1 gets pause only
     expect(simnet.callPublicFn(GOV, "pause", [], wallet1).result).toBeOk(Cl.bool(true));
     expect(simnet.callPublicFn(GOV, "unpause", [], wallet1).result).toBeOk(Cl.bool(true));
+    // holding pause grants no governance powers: neither config nor role management
     expect(setFee(5n, wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+    expect(setRole(wallet1, ROLE_GOVERNANCE, true, wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
 });
 
