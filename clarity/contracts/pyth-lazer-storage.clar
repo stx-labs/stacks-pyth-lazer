@@ -5,7 +5,7 @@
 
 ;;;; Constants
 
-;; Caller of `write` is not the authorized writer
+;; Caller is not authorized
 (define-constant ERR_UNAUTHORIZED (err u3001))
 ;; No record stored for this feed-id
 (define-constant ERR_PRICE_FEED_NOT_FOUND (err u3003))
@@ -121,7 +121,7 @@
 			written)))
 
 ;; The replay/monotonic guard: an update is accepted only when its publish-time is
-;; strictly newer than the stored one (or stored time is empty)
+;; strictly newer than the stored time
 (define-private (is-update-newer (feed-id uint) (publish-time uint))
 	(match (map-get? prices feed-id)
 		existing (> publish-time (get publish-time existing))
