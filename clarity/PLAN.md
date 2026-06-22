@@ -375,12 +375,45 @@ hold a role. This also implements what were items #3 (role separation) and a pau
 from the original future-work list.
 
 **Still future work** (none needed for v1; the role API admits them without breaking reads/writes):
-- Two-step role handoff (`set-pending` / `accept`) to avoid granting to an unusable address.
-- Hold a role in a Stacks multisig/DAO principal (no code change — just a grant).
+- **Timelocked sensitive updates** — the highest-value hardening; significant enough for its own
+  PR. See **§6b**.
+- **Bounded parameters** — cap `set-fee` at a sane max and floor `set-stale-price-threshold`, so
+  even a compromised governance key can't set an extortionate fee or disable staleness. ~3 lines,
+  enforced at write; no timelock needed.
+- Hold a role in a Stacks multisig/DAO principal (no code change — just a grant). Arguably gets
+  most of the compromise-resistance of a timelock on its own.
 - Finer-grained roles (signer-manager vs fee-setter vs upgrader) — add role IDs.
 - Lazer-signed governance: accept signed governance messages from Pyth (parsed like the EVM
   contract's `updateTrustedSigner` authority) instead of a Stacks-principal role.
-- Timelock / delay on sensitive changes (trusted-signer rotation, fee hikes, upgrades).
+- ~~Two-step role handoff (`set-pending` / `accept`)~~ — **low priority now.** The additive
+  `set-role` model (grant/revoke, vs the old `set-admin` *replace*) already removes the "fat-finger
+  to a dead address bricks the contract" risk that motivates handoff: a bad grant never revokes
+  your own role. Remaining lockout is operational sequencing (grant new → verify → revoke old).
+
+### 6b. Governance — timelocked sensitive updates (future PR)
+
+**Status: not implemented; scope as a standalone PR.** A "two-stage update" (propose → delay →
+execute) on the *security-critical* setters turns the catastrophic attack — a compromised
+governance key injecting a malicious trusted signer or decoder — from instant into delayed and
+**observable**, giving a reaction window. It composes with the **pause role** (§6a): because pause
+is a *separate* key, its holder becomes a real veto.
+
+- **Scope to the sensitive setters only:** `set-trusted-signers`, `set-decoder`, and granting
+  `ROLE_GOVERNANCE`. Leave `set-fee` / `set-stale-price-threshold` / `set-fee-recipient` instant
+  (low severity; bounded params above cover those).
+- **Shape per setter:** `propose-X` (governance role) records the value + `eta = burn-block-height
+  + GOVERNANCE_DELAY` in an `(optional {...})` pending var and emits a `proposed` event with the
+  eta; `execute-X` (governance role) applies it once `burn-block-height >= eta` and clears pending;
+  `cancel-pending-X` (**pause** role) vetoes without halting price updates. Use `burn-block-height`
+  (Bitcoin, ~10 min/block, monotonic) for the delay, not the fast/variable Nakamoto stacks clock.
+- **Watcher-grade events are load-bearing:** the timelock only helps if something is watching for
+  the `proposed`+`eta` event and can call `cancel`/`pause` in time. Emit the value and the eta.
+- **Key tradeoff to settle — delay vs. signer-expiry margin:** a timelock on `set-trusted-signers`
+  fights *legitimate* fast rotation. If the old signer expires before a delayed replacement can
+  execute, the oracle goes dark, so `GOVERNANCE_DELAY` must be comfortably shorter than the margin
+  kept between "add new signer" and "old signer expires." Timelock guards *injection*; pause guards
+  the opposite direction (stop trusting a compromised signer *now*) — keep both.
+- Error codes continue governance's `u40xx` range (next free: `u4005`, `u4006`).
 
 ---
 
