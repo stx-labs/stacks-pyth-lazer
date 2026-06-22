@@ -9,54 +9,59 @@ import { LRUCache } from 'lru-cache';
 import { ENV } from '../env.ts';
 import { parsePythLazerChannel } from './helpers.ts';
 
-/** An entry tracked in the LRU cache, one per monitored pair. */
-export interface MonitoredPair {
-  /** Pyth Lazer symbol, e.g. `Crypto.BTC/USD`. */
-  symbol: string;
-  /** Lazer subscription id assigned to this pair. */
-  subscriptionId: number;
-  /** Whether an active websocket subscription exists for this pair. */
-  subscribed: boolean;
-  /** Most recent parsed payload seen for this pair, if any. */
-  lastUpdate?: ParsedPayload;
-}
+/**
+ * Maximum number of feeds we monitor at once. The on-chain
+ * `pyth-lazer-oracle-v1.verify-and-update-price-feeds` decodes a single signed
+ * message into a `(list 16 ...)` of feeds, so there is no point subscribing to
+ * more pairs than we can submit in one transaction.
+ */
+const MAX_PRICE_FEEDS = 16;
+
+/**
+ * All monitored feeds share a single Lazer subscription so they arrive together
+ * in one signed message (submittable in one tx). This is its fixed id.
+ */
+const SUBSCRIPTION_ID = 1;
 
 /** Default symbols to subscribe to. */
 const DEFAULT_SYMBOLS = ['Crypto.BTC/USD', 'Crypto.STX/USD', 'Crypto.USDC/USD'];
 
 /**
- * Connects to the Pyth Lazer websocket service and maintains subscriptions to a dynamic set of
- * price feed pairs (BTC/USD by default). Monitored pairs are held in an LRU cache; when a pair is
- * evicted its subscription is torn down.
+ * Connects to the Pyth Lazer websocket service and maintains a single
+ * subscription covering up to {@link MAX_PRICE_FEEDS} price pairs. The monitored
+ * set is held in an LRU cache; adding a pair (or evicting the least-recently-used
+ * one when full) refreshes the subscription so it always reflects the current
+ * set under one {@link SUBSCRIPTION_ID}. All feeds therefore arrive in one signed
+ * message that can be relayed to the contract in a single transaction.
  */
 export class PriceMonitor {
   private pythClient?: PythLazerClient;
-  private channel: Channel;
-  /** Monitored pairs keyed by symbol. Eviction unsubscribes from the stream. */
-  private readonly symbolCache: LRUCache<string, MonitoredPair>;
-  /** Reverse index from subscription id to symbol, for routing incoming messages. */
-  private readonly subscriptions = new Map<number, string>();
-  /** Next subscription id to assign. */
-  private nextSubscriptionId = 1;
+  private readonly channel: Channel;
+  /** Whether the single subscription is currently active on the stream. */
+  private subscribed = false;
+  /** Most recent parsed payload (all feeds) seen on the subscription, if any. */
+  private latestPayload?: ParsedPayload;
+  /** Monitored symbols, capped at {@link MAX_PRICE_FEEDS}. The value is unused. */
+  private readonly symbolCache: LRUCache<string, boolean>;
 
   constructor() {
     this.channel = parsePythLazerChannel(ENV.PRICE_MONITOR_PYTH_LAZER_CHANNEL);
-    this.symbolCache = new LRUCache<string, MonitoredPair>({
-      max: ENV.PRICE_MONITOR_CACHE_MAX,
-      dispose: entry => {
-        logger.debug(`[PriceMonitor] evicting symbol ${entry.symbol} from cache`);
-        this.teardownSubscription(entry.subscriptionId);
+    this.symbolCache = new LRUCache<string, boolean>({
+      max: MAX_PRICE_FEEDS,
+      dispose: (_value, symbol) => {
+        // Eviction only logs; `refreshSubscription` (run by the mutator after
+        // the cache settles) rebuilds the subscription from the surviving keys.
+        logger.debug(`[PriceMonitor] evicting symbol ${symbol} from cache`);
       },
     });
-    // Add the default symbols to the cache. The subscriptions will be created lazily when the
-    // client is started.
+    // Seed the default symbols. The subscription is created lazily in `start()`.
     for (const symbol of DEFAULT_SYMBOLS) {
-      this.subscribeToSymbol(symbol);
+      this.requestPriceUpdate(symbol);
     }
   }
 
   /**
-   * Establishes the connection pool and subscribes to all default symbols.
+   * Establishes the connection pool and subscribes to the full monitored set.
    */
   async start(): Promise<void> {
     if (this.pythClient) {
@@ -64,9 +69,7 @@ export class PriceMonitor {
       return;
     }
 
-    logger.info(
-      `[PriceMonitor] connecting to Pyth Lazer channel ${this.channel}`
-    );
+    logger.info(`[PriceMonitor] connecting to Pyth Lazer channel ${this.channel}`);
     this.pythClient = await PythLazerClient.create({
       token: ENV.PYTH_API_KEY,
       webSocketPoolConfig: {
@@ -92,10 +95,13 @@ export class PriceMonitor {
       logger.info('[PriceMonitor] Pyth Lazer connection restored');
     });
 
-    // Resume subscriptions to all symbols in the cache.
-    for (const symbol of this.subscriptions.values()) {
-      this.subscribeToSymbol(symbol);
-    }
+    // Subscribe to every symbol queued before the client connected.
+    this.refreshSubscription();
+  }
+
+  /** The most recent parsed payload (all feeds) seen on the subscription, if any. */
+  get lastPayload(): ParsedPayload | undefined {
+    return this.latestPayload;
   }
 
   /**
@@ -105,74 +111,61 @@ export class PriceMonitor {
     if (!this.pythClient) return;
     this.pythClient.shutdown();
     this.pythClient = undefined;
+    this.subscribed = false;
     logger.info('[PriceMonitor] stopped');
   }
 
   /**
    * Requests live updates for a pair on behalf of an external caller. Adds the
-   * pair to the LRU cache and subscribes to its feed; if the pair is already
-   * monitored this simply refreshes its recency in the cache.
-   * @param symbol - Pyth Lazer symbol, e.g. `BTC/USD`.
-   * @returns The cached monitored-pair entry.
+   * pair to the LRU cache (evicting the least-recently-used pair if at capacity)
+   * and refreshes the subscription. If the pair is already monitored this only
+   * bumps its recency in the cache and leaves the subscription unchanged.
+   * @param symbol - Pyth Lazer symbol, e.g. `Crypto.BTC/USD`.
    */
   requestPriceUpdate(symbol: string): void {
-    this.subscribeToSymbol(symbol);
+    if (this.symbolCache.get(symbol)) return; // already monitored; bumps recency
+    this.symbolCache.set(symbol, true);
+    this.refreshSubscription();
   }
 
   /**
-   * Subscribes to a symbol and adds it to the cache. This is an idempotent operation; if the symbol
-   * is already subscribed, this does nothing.
-   * @param symbol - Pyth Lazer symbol, e.g. `Crypto.STX/USD`.
+   * Replaces the single subscription with one covering the full current symbol
+   * set, so all monitored feeds arrive together in one signed message. No-op
+   * until the client is connected (`start()` calls this once it is).
    */
-  private subscribeToSymbol(symbol: string): void {
-    let entry = this.symbolCache.get(symbol);
-    if (!entry) {
-      const subscriptionId = this.nextSubscriptionId++;
-      const newEntry: MonitoredPair = {
-        symbol,
-        subscriptionId,
-        subscribed: false,
-      };
-      this.symbolCache.set(symbol, newEntry);
-      this.subscriptions.set(subscriptionId, symbol);
-      entry = newEntry;
-    }
-    if (this.pythClient && !entry.subscribed) {
-      this.pythClient.subscribe({
-        type: 'subscribe',
-        subscriptionId: entry.subscriptionId,
-        symbols: [symbol],
-        properties: ['price', 'exponent', 'confidence', 'publisherCount'],
-        formats: ['evm'],
-        // Binary delivery yields the raw signed `evm` payload (for on-chain
-        // submission); `parsed` additionally includes human-readable prices.
-        deliveryFormat: 'binary',
-        parsed: true,
-        channel: this.channel,
-      });
-      entry.subscribed = true;
-      logger.info(
-        { subscriptionId: entry.subscriptionId, symbol },
-        `[PriceMonitor] subscribed to price feed for symbol ${symbol}`
-      );
-    }
-  }
+  private refreshSubscription(): void {
+    if (!this.pythClient) return;
 
-  /**
-   * Tears down a single subscription: stops the server-side stream and drops the
-   * reverse index. Invoked by the cache's `dispose` hook, so it must not call
-   * back into the cache (that would re-enter `dispose`). To remove a monitored
-   * symbol programmatically, call `symbolCache.delete(symbol)` and let `dispose`
-   * run this.
-   * @param subscriptionId - The subscription id to tear down.
-   */
-  private teardownSubscription(subscriptionId: number): void {
-    this.pythClient?.unsubscribe(subscriptionId);
-    const symbol = this.subscriptions.get(subscriptionId);
-    this.subscriptions.delete(subscriptionId);
+    if (this.subscribed) {
+      this.pythClient.unsubscribe(SUBSCRIPTION_ID);
+      this.subscribed = false;
+    }
+
+    const symbols = [...this.symbolCache.keys()];
+    if (symbols.length === 0) {
+      logger.info('[PriceMonitor] no symbols to monitor; subscription cleared');
+      return;
+    }
+
+    this.pythClient.subscribe({
+      type: 'subscribe',
+      subscriptionId: SUBSCRIPTION_ID,
+      symbols,
+      // Only the fields `pyth-lazer-oracle-v1` requires to store a feed
+      // (price + exponent + publisher-count); anything else just bloats the
+      // signed payload. A feed missing any of these is skipped on-chain.
+      properties: ['price', 'exponent', 'publisherCount'],
+      formats: ['evm'],
+      // Binary delivery yields the raw signed `evm` payload (for on-chain
+      // submission); `parsed` additionally includes human-readable prices.
+      deliveryFormat: 'binary',
+      parsed: true,
+      channel: this.channel,
+    });
+    this.subscribed = true;
     logger.info(
-      { subscriptionId, symbol },
-      `[PriceMonitor] unsubscribed from subscription ${subscriptionId}`
+      { subscriptionId: SUBSCRIPTION_ID, symbols },
+      `[PriceMonitor] subscribed to ${symbols.length} feed(s)`
     );
   }
 
@@ -183,24 +176,20 @@ export class PriceMonitor {
       return;
     }
 
-    const { parsed } = event.value;
-    if (!parsed) return;
-
-    const symbol = this.subscriptions.get(event.value.subscriptionId);
-    if (!symbol) {
+    if (event.value.subscriptionId !== SUBSCRIPTION_ID) {
       logger.debug(
         `[PriceMonitor] received message for unknown subscription ${event.value.subscriptionId}, unsubscribing`
       );
-      this.teardownSubscription(event.value.subscriptionId);
+      this.pythClient?.unsubscribe(event.value.subscriptionId);
       return;
     }
 
-    const entry = this.symbolCache.peek(symbol);
-    if (entry) entry.lastUpdate = parsed;
+    const { parsed } = event.value;
+    if (!parsed) return;
+    this.latestPayload = parsed;
 
     // TODO(next step): deviation/heartbeat triggers + on-chain submission using
     // the signed `evm` payload in `event.value.evm`.
-    // this.onPriceUpdate?.(symbol, parsed);
     logger.debug(event.value, '[PriceMonitor] received price update');
   };
 }

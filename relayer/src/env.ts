@@ -14,8 +14,6 @@ const schema = Type.Object({
   /** Pyth API key */
   PYTH_API_KEY: Type.String(),
 
-  /** Maximum number of price feed pairs to keep in the in-memory LRU cache */
-  PRICE_MONITOR_CACHE_MAX: Type.Integer({ default: 256, minimum: 1 }),
   /** Number of redundant websocket connections in the pool. Defaults to 4. */
   PRICE_MONITOR_NUM_CONNECTIONS: Type.Integer({ default: 4, minimum: 1 }),
   /** Pyth Lazer channel to subscribe to. Defaults to `fixed_rate_200ms`. */
