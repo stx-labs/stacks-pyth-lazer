@@ -4,12 +4,12 @@ import FastifyCors from '@fastify/cors';
 import { Server } from 'http';
 import { PINO_LOGGER_CONFIG } from '@stacks/api-toolkit';
 import { PairsRoutes } from './routes/pairs.js';
-import type { PriceMonitor } from '../pyth/price-monitor.js';
+import type { PythPriceMonitor } from '../relayer/pyth-price-monitor.ts';
 
 /** Configuration for the API service. */
 export interface ApiConfig {
   /** Price monitor instance. */
-  priceMonitor: PriceMonitor;
+  priceMonitor: PythPriceMonitor;
 }
 
 export const Api: FastifyPluginAsync<ApiConfig, Server, TypeBoxTypeProvider> = async (

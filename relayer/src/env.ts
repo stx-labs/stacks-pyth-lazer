@@ -31,6 +31,27 @@ const schema = Type.Object({
   STACKS_NODE_RPC_HOST: Type.String(),
   /** Stacks node RPC port */
   STACKS_NODE_RPC_PORT: Type.Number({ minimum: 0, maximum: 65535 }),
+  /**
+   * Principal that deployed the Pyth Lazer contracts. The storage and governance
+   * contract ids are derived from it (`<deployer>.pyth-lazer-storage`, etc.).
+   */
+  STACKS_PYTH_DEPLOYER: Type.String(),
+
+  /**
+   * Push a feed when its price moves at least this many basis points from the
+   * value last written on-chain (100 bps = 1%). Defaults to 50 (0.5%).
+   */
+  RELAYER_DEVIATION_BPS: Type.Integer({ default: 50, minimum: 1 }),
+  /**
+   * Force a push at least this often (ms) even if prices are flat. Must be
+   * shorter than governance's stale-price threshold. Defaults to 30s.
+   */
+  RELAYER_HEARTBEAT_MS: Type.Integer({ default: 30_000, minimum: 1 }),
+  /**
+   * Minimum spacing between submissions (ms). No point submitting faster than
+   * Stacks block production (~5s, Nakamoto). Defaults to 5s.
+   */
+  RELAYER_MIN_SUBMIT_INTERVAL_MS: Type.Integer({ default: 5_000, minimum: 0 }),
 });
 type Env = Static<typeof schema>;
 

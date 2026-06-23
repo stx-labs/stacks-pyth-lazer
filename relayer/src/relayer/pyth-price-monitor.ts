@@ -7,34 +7,61 @@ import {
 } from '@pythnetwork/pyth-lazer-sdk';
 import { LRUCache } from 'lru-cache';
 import { ENV } from '../env.ts';
-import { parsePythLazerChannel } from './helpers.ts';
 
 /**
  * Maximum number of feeds we monitor at once. The on-chain
- * `pyth-lazer-oracle-v1.verify-and-update-price-feeds` decodes a single signed
- * message into a `(list 16 ...)` of feeds, so there is no point subscribing to
- * more pairs than we can submit in one transaction.
+ * `pyth-lazer-oracle-v1.verify-and-update-price-feeds` decodes a single signed message into a
+ * `(list 16 ...)` of feeds, so there is no point subscribing to more pairs than we can submit in
+ * one transaction.
  */
 const MAX_PRICE_FEEDS = 16;
 
 /**
- * All monitored feeds share a single Lazer subscription so they arrive together
- * in one signed message (submittable in one tx). This is its fixed id.
+ * All monitored feeds share a single Lazer subscription so they arrive together in one signed
+ * message (submittable in one tx). This is its fixed id.
  */
 const SUBSCRIPTION_ID = 1;
 
-/** Default symbols to subscribe to. */
+/**
+ * Default price feed symbols to subscribe to. New pairs will be added to the subscription on
+ * demand.
+ */
 const DEFAULT_SYMBOLS = ['Crypto.BTC/USD', 'Crypto.STX/USD', 'Crypto.USDC/USD'];
 
 /**
- * Connects to the Pyth Lazer websocket service and maintains a single
- * subscription covering up to {@link MAX_PRICE_FEEDS} price pairs. The monitored
- * set is held in an LRU cache; adding a pair (or evicting the least-recently-used
- * one when full) refreshes the subscription so it always reflects the current
- * set under one {@link SUBSCRIPTION_ID}. All feeds therefore arrive in one signed
- * message that can be relayed to the contract in a single transaction.
+ * Invoked for each binary update on the subscription, carrying the signed `evm` payload (for
+ * on-chain submission) and the parsed prices (for the relaying heuristic).
  */
-export class PriceMonitor {
+export type PythPricePayloadHandler = (evm: Buffer, parsed: ParsedPayload) => void;
+
+/**
+ * Parses a Pyth Lazer channel string into a Channel enum value.
+ * @param channel - The channel string.
+ * @returns The Channel enum value.
+ */
+function parsePythLazerChannel(channel: string): Channel {
+  switch (channel) {
+    case 'fixed_rate_50ms':
+      return 'fixed_rate@50ms';
+    case 'fixed_rate_200ms':
+      return 'fixed_rate@200ms';
+    case 'fixed_rate_1000ms':
+      return 'fixed_rate@1000ms';
+    case 'real_time':
+      return 'real_time';
+    default:
+      throw new Error(`Invalid Pyth Lazer channel: ${channel}`);
+  }
+}
+
+/**
+ * Connects to the Pyth Lazer websocket service and maintains a single subscription covering up to
+ * {@link MAX_PRICE_FEEDS} price pairs. The monitored set is held in an LRU cache; adding a pair (or
+ * evicting the least-recently-used one when full) refreshes the subscription so it always reflects
+ * the current set under one {@link SUBSCRIPTION_ID}. All feeds therefore arrive in one signed
+ * message that can be relayed to a contract in a single transaction.
+ */
+export class PythPriceMonitor {
   private pythClient?: PythLazerClient;
   private readonly channel: Channel;
   /** Whether the single subscription is currently active on the stream. */
@@ -43,6 +70,8 @@ export class PriceMonitor {
   private latestPayload?: ParsedPayload;
   /** Monitored symbols, capped at {@link MAX_PRICE_FEEDS}. The value is unused. */
   private readonly symbolCache: LRUCache<string, boolean>;
+  /** Optional consumer of each update (e.g. the relaying heuristic). */
+  private onPayload?: PythPricePayloadHandler;
 
   constructor() {
     this.channel = parsePythLazerChannel(ENV.PRICE_MONITOR_PYTH_LAZER_CHANNEL);
@@ -51,7 +80,7 @@ export class PriceMonitor {
       dispose: (_value, symbol) => {
         // Eviction only logs; `refreshSubscription` (run by the mutator after
         // the cache settles) rebuilds the subscription from the surviving keys.
-        logger.debug(`[PriceMonitor] evicting symbol ${symbol} from cache`);
+        logger.debug(`${this.constructor.name} evicting symbol ${symbol} from cache`);
       },
     });
     // Seed the default symbols. The subscription is created lazily in `start()`.
@@ -62,14 +91,15 @@ export class PriceMonitor {
 
   /**
    * Establishes the connection pool and subscribes to the full monitored set.
+   * @param onPayload - The handler for the price payload.
    */
-  async start(): Promise<void> {
+  async start(onPayload?: PythPricePayloadHandler): Promise<void> {
     if (this.pythClient) {
-      logger.debug('[PriceMonitor] already started; skipping start()');
+      logger.debug(`${this.constructor.name} already started; skipping start()`);
       return;
     }
-
-    logger.info(`[PriceMonitor] connecting to Pyth Lazer channel ${this.channel}`);
+    if (onPayload) this.onPayload = onPayload;
+    logger.info(`${this.constructor.name} connecting to Pyth Lazer channel ${this.channel}`);
     this.pythClient = await PythLazerClient.create({
       token: ENV.PYTH_API_KEY,
       webSocketPoolConfig: {
@@ -80,19 +110,19 @@ export class PriceMonitor {
           'wss://pyth-lazer-2.dourolabs.app/v1/stream',
         ],
         onWebSocketError: error => {
-          logger.error({ error }, '[PriceMonitor] websocket connection error');
+          logger.error({ error }, `${this.constructor.name} websocket connection error`);
         },
         onWebSocketPoolError: error => {
-          logger.error(error, '[PriceMonitor] websocket pool error');
+          logger.error(error, `${this.constructor.name} websocket pool error`);
         },
       },
     });
     this.pythClient.addMessageListener(this.handleMessage);
     this.pythClient.addAllConnectionsDownListener(() => {
-      logger.error('[PriceMonitor] all Pyth Lazer connections are down');
+      logger.error(`${this.constructor.name} all Pyth Lazer connections are down`);
     });
     this.pythClient.addConnectionRestoredListener(() => {
-      logger.info('[PriceMonitor] Pyth Lazer connection restored');
+      logger.info(`${this.constructor.name} Pyth Lazer connection restored`);
     });
 
     // Subscribe to every symbol queued before the client connected.
@@ -112,7 +142,7 @@ export class PriceMonitor {
     this.pythClient.shutdown();
     this.pythClient = undefined;
     this.subscribed = false;
-    logger.info('[PriceMonitor] stopped');
+    logger.info(`${this.constructor.name} stopped`);
   }
 
   /**
@@ -143,7 +173,7 @@ export class PriceMonitor {
 
     const symbols = [...this.symbolCache.keys()];
     if (symbols.length === 0) {
-      logger.info('[PriceMonitor] no symbols to monitor; subscription cleared');
+      logger.info(`${this.constructor.name} no symbols to monitor; subscription cleared`);
       return;
     }
 
@@ -165,31 +195,31 @@ export class PriceMonitor {
     this.subscribed = true;
     logger.info(
       { subscriptionId: SUBSCRIPTION_ID, symbols },
-      `[PriceMonitor] subscribed to ${symbols.length} feed(s)`
+      `${this.constructor.name} subscribed to ${symbols.length} feed(s)`
     );
   }
 
   private readonly handleMessage = (event: JsonOrBinaryResponse): void => {
     if (event.type !== 'binary') {
       // JSON control/error responses (subscription acks, etc.).
-      logger.debug({ value: event.value }, '[PriceMonitor] received json message');
+      logger.debug({ value: event.value }, `${this.constructor.name} received json message`);
       return;
     }
 
     if (event.value.subscriptionId !== SUBSCRIPTION_ID) {
       logger.debug(
-        `[PriceMonitor] received message for unknown subscription ${event.value.subscriptionId}, unsubscribing`
+        `${this.constructor.name} received message for unknown subscription ${event.value.subscriptionId}, unsubscribing`
       );
       this.pythClient?.unsubscribe(event.value.subscriptionId);
       return;
     }
 
-    const { parsed } = event.value;
+    const { parsed, evm } = event.value;
     if (!parsed) return;
     this.latestPayload = parsed;
 
-    // TODO(next step): deviation/heartbeat triggers + on-chain submission using
-    // the signed `evm` payload in `event.value.evm`.
-    logger.debug(event.value, '[PriceMonitor] received price update');
+    // Hand the signed `evm` payload + parsed prices to the relaying heuristic.
+    if (evm) this.onPayload?.(evm, parsed);
+    logger.debug(event.value, `${this.constructor.name} received price update`);
   };
 }
