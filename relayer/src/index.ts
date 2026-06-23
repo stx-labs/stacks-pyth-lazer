@@ -1,9 +1,9 @@
 import { logger, registerShutdownConfig } from '@stacks/api-toolkit';
 import { buildApiServer } from './api/init.js';
 import { ENV } from './env.js';
-import { PythPriceMonitor } from './relayer/pyth-price-monitor.ts';
+import { PythSymbolMonitor } from './relayer/pyth-symbol-monitor.ts';
 import { PriceUpdatePlanner } from './relayer/price-update-planner.ts';
-import { LoggingSubmitter } from './relayer/submitter.js';
+import { PriceUpdateTransactionSubmitter } from './relayer/price-update-transaction-submitter.ts';
 import { StacksPriceReader } from './stacks/price-reader.js';
 import type { ApiConfig } from './api/init.js';
 
@@ -14,11 +14,27 @@ import type { ApiConfig } from './api/init.js';
 async function initBackgroundServices(config: ApiConfig) {
   logger.info('Initializing background services...');
 
-  // The relaying heuristic consumes each streamed update and decides whether to
-  // submit it on-chain (via a stub submitter for now).
+  const nodeRpcBaseUrl = `http://${ENV.STACKS_NODE_RPC_HOST}:${ENV.STACKS_NODE_RPC_PORT}`;
+
+  const reader = new StacksPriceReader({
+    sender: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
+    rpcBaseUrl: nodeRpcBaseUrl,
+  });
+
+  const submitter = new PriceUpdateTransactionSubmitter({
+    senderKey: ENV.TX_SUBMITTER_PRIVATE_KEY,
+    network: ENV.NETWORK,
+    deployer: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
+    txFeeMicroStx: ENV.TX_SUBMITTER_FEE_USTX,
+    rpcBaseUrl: nodeRpcBaseUrl,
+  });
+
   const planner = new PriceUpdatePlanner({
-    reader: new StacksPriceReader(),
-    submitter: new LoggingSubmitter(),
+    reader,
+    submitter,
+    heartbeatMs: ENV.PRICE_UPDATE_HEARTBEAT_MS,
+    minSubmitIntervalMs: ENV.PRICE_UPDATE_MIN_SUBMIT_INTERVAL_MS,
+    deviationBps: ENV.PRICE_UPDATE_DEVIATION_BPS,
   });
   await planner.validateHeartbeat();
 
@@ -54,7 +70,7 @@ async function initApiService(config: ApiConfig) {
  */
 async function initApp() {
   const config: ApiConfig = {
-    priceMonitor: new PythPriceMonitor(),
+    priceMonitor: new PythSymbolMonitor(),
   };
   await initBackgroundServices(config);
   await initApiService(config);

@@ -61,7 +61,7 @@ function parsePythLazerChannel(channel: string): Channel {
  * the current set under one {@link SUBSCRIPTION_ID}. All feeds therefore arrive in one signed
  * message that can be relayed to a contract in a single transaction.
  */
-export class PythPriceMonitor {
+export class PythSymbolMonitor {
   private pythClient?: PythLazerClient;
   private readonly channel: Channel;
   /** Whether the single subscription is currently active on the stream. */
@@ -74,7 +74,7 @@ export class PythPriceMonitor {
   private onPayload?: PythPricePayloadHandler;
 
   constructor() {
-    this.channel = parsePythLazerChannel(ENV.PRICE_MONITOR_PYTH_LAZER_CHANNEL);
+    this.channel = parsePythLazerChannel(ENV.PYTH_LAZER_CHANNEL);
     this.symbolCache = new LRUCache<string, boolean>({
       max: MAX_PRICE_FEEDS,
       dispose: (_value, symbol) => {
@@ -103,7 +103,7 @@ export class PythPriceMonitor {
     this.pythClient = await PythLazerClient.create({
       token: ENV.PYTH_API_KEY,
       webSocketPoolConfig: {
-        numConnections: ENV.PRICE_MONITOR_NUM_CONNECTIONS,
+        numConnections: ENV.PYTH_CLIENT_NUM_CONNECTIONS,
         urls: [
           'wss://pyth-lazer-0.dourolabs.app/v1/stream',
           'wss://pyth-lazer-1.dourolabs.app/v1/stream',

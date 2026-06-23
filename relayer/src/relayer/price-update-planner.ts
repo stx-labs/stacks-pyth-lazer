@@ -1,9 +1,8 @@
 import { logger } from '@stacks/api-toolkit';
 import type { ParsedPayload } from '@pythnetwork/pyth-lazer-sdk';
-import { ENV } from '../env.ts';
 import type { StacksPriceReader } from '../stacks/price-reader.js';
 import type { OnChainPrice } from '../stacks/price-reader.js';
-import type { PriceFeedSubmitter } from './submitter.js';
+import type { PriceUpdateTransactionSubmitter } from './price-update-transaction-submitter.js';
 import BigNumber from 'bignumber.js';
 
 /** Why a submission was triggered (for logging / metrics). */
@@ -15,11 +14,6 @@ type SubmitReason = 'on-demand' | 'heartbeat' | 'deviation';
  * value — last on-chain price/publish-time we deviate against.
  */
 type Baseline = OnChainPrice | null;
-
-export interface UpdatePlannerOptions {
-  reader: StacksPriceReader;
-  submitter: PriceFeedSubmitter;
-}
 
 /**
  * Decides which Pyth Lazer updates to relay on-chain. Because every monitored feed rides in one
@@ -33,11 +27,11 @@ export interface UpdatePlannerOptions {
  */
 export class PriceUpdatePlanner {
   private readonly reader: StacksPriceReader;
-  private readonly submitter: PriceFeedSubmitter;
+  private readonly submitter: PriceUpdateTransactionSubmitter;
 
-  private readonly heartbeatMs = ENV.RELAYER_HEARTBEAT_MS;
-  private readonly minSubmitIntervalMs = ENV.RELAYER_MIN_SUBMIT_INTERVAL_MS;
-  private readonly deviationBps = new BigNumber(ENV.RELAYER_DEVIATION_BPS);
+  private readonly heartbeatMs: number;
+  private readonly minSubmitIntervalMs: number;
+  private readonly deviationBps: BigNumber;
 
   /** Last on-chain price per feed id (see {@link Baseline}). */
   private readonly baselines = new Map<number, Baseline>();
@@ -53,9 +47,18 @@ export class PriceUpdatePlanner {
   /** An on-demand push has been requested. */
   private pendingForce = false;
 
-  constructor(opts: UpdatePlannerOptions) {
+  constructor(opts: {
+    reader: StacksPriceReader;
+    submitter: PriceUpdateTransactionSubmitter;
+    heartbeatMs: number;
+    minSubmitIntervalMs: number;
+    deviationBps: number;
+  }) {
     this.reader = opts.reader;
     this.submitter = opts.submitter;
+    this.heartbeatMs = opts.heartbeatMs;
+    this.minSubmitIntervalMs = opts.minSubmitIntervalMs;
+    this.deviationBps = new BigNumber(opts.deviationBps);
   }
 
   /** Best-effort sanity check: warn if heartbeat won't keep feeds fresh. */
@@ -65,11 +68,11 @@ export class PriceUpdatePlanner {
       if (thresholdSeconds !== null && BigInt(this.heartbeatMs) >= thresholdSeconds * 1000n) {
         logger.warn(
           { heartbeatMs: this.heartbeatMs, staleThresholdSeconds: Number(thresholdSeconds) },
-          '[UpdatePlanner] heartbeat is not shorter than the stale-price threshold; feeds may read as stale between pushes'
+          `${this.constructor.name} heartbeat is not shorter than the stale-price threshold; feeds may read as stale between pushes`
         );
       }
     } catch (error) {
-      logger.warn(error, '[UpdatePlanner] could not read stale-price threshold');
+      logger.warn(error, `${this.constructor.name} could not read stale-price threshold`);
     }
   }
 
@@ -151,7 +154,7 @@ export class PriceUpdatePlanner {
     this.inFlight = true;
     logger.info(
       { reason, feeds: parsed.priceFeeds.length, timestampUs: parsed.timestampUs },
-      '[UpdatePlanner] submitting signed update'
+      `${this.constructor.name} submitting signed update`
     );
 
     this.submitter
@@ -160,7 +163,7 @@ export class PriceUpdatePlanner {
         if (!result.ok) {
           logger.error(
             { error: result.error },
-            `[UpdatePlanner] submission failed: ${result.error}`
+            `${this.constructor.name} submission failed: ${result.error}`
           );
           return;
         }
@@ -178,7 +181,7 @@ export class PriceUpdatePlanner {
         }
       })
       .catch(error => {
-        logger.error(error, `[UpdatePlanner] submission interrupted: ${error.message}`);
+        logger.error(error, `${this.constructor.name} submission interrupted: ${error.message}`);
       })
       .finally(() => {
         this.inFlight = false;
@@ -202,7 +205,10 @@ export class PriceUpdatePlanner {
         })
         .catch(error => {
           // Leave unresolved so the next message retries; heartbeat still covers us.
-          logger.warn({ error, feedId }, '[UpdatePlanner] failed to read on-chain baseline');
+          logger.warn(
+            { error, feedId },
+            `${this.constructor.name} failed to read on-chain baseline`
+          );
         })
         .finally(() => {
           this.resolving.delete(feedId);

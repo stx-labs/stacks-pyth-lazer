@@ -1,6 +1,5 @@
 import { createCoreRpcClient, type CoreRpcClient } from '@stacks/rpc-client';
 import { Cl, ClarityType, cvToHex, hexToCV } from '@stacks/transactions';
-import { ENV } from '../env.ts';
 import BigNumber from 'bignumber.js';
 
 /** A price record as stored on-chain in the `pyth-lazer-storage` contract. */
@@ -28,11 +27,11 @@ export class StacksPriceReader {
   /** Principal used as the `sender` of read-only calls (value is irrelevant). */
   private readonly sender: string;
 
-  constructor() {
+  constructor(options: { sender: string; rpcBaseUrl: string }) {
     this.client = createCoreRpcClient({
-      baseUrl: `http://${ENV.STACKS_NODE_RPC_HOST}:${ENV.STACKS_NODE_RPC_PORT}`,
+      baseUrl: options.rpcBaseUrl,
     });
-    this.sender = ENV.STACKS_PYTH_DEPLOYER;
+    this.sender = options.sender;
   }
 
   /**
