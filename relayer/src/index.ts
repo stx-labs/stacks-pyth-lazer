@@ -4,7 +4,7 @@ import { ENV } from './env.js';
 import { PythSymbolMonitor } from './relayer/pyth-symbol-monitor.ts';
 import { PriceUpdatePlanner } from './relayer/price-update-planner.ts';
 import { PriceUpdateTransactionSubmitter } from './relayer/price-update-transaction-submitter.ts';
-import { StacksPriceReader } from './stacks/price-reader.js';
+import { ContractSymbolPriceReader } from './relayer/contract-symbol-price-reader.ts';
 import type { ApiConfig } from './api/init.js';
 
 /**
@@ -16,7 +16,7 @@ async function initBackgroundServices(config: ApiConfig) {
 
   const nodeRpcBaseUrl = `http://${ENV.STACKS_NODE_RPC_HOST}:${ENV.STACKS_NODE_RPC_PORT}`;
 
-  const reader = new StacksPriceReader({
+  const reader = new ContractSymbolPriceReader({
     sender: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
     rpcBaseUrl: nodeRpcBaseUrl,
   });

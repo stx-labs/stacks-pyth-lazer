@@ -1,7 +1,7 @@
 import { logger } from '@stacks/api-toolkit';
 import type { ParsedPayload } from '@pythnetwork/pyth-lazer-sdk';
-import type { StacksPriceReader } from '../stacks/price-reader.js';
-import type { OnChainPrice } from '../stacks/price-reader.js';
+import type { ContractSymbolPriceReader } from './contract-symbol-price-reader.ts';
+import type { OnChainPrice } from './contract-symbol-price-reader.ts';
 import type { PriceUpdateTransactionSubmitter } from './price-update-transaction-submitter.js';
 import BigNumber from 'bignumber.js';
 
@@ -26,7 +26,7 @@ type Baseline = OnChainPrice | null;
  * seen.
  */
 export class PriceUpdatePlanner {
-  private readonly reader: StacksPriceReader;
+  private readonly reader: ContractSymbolPriceReader;
   private readonly submitter: PriceUpdateTransactionSubmitter;
 
   private readonly heartbeatMs: number;
@@ -48,7 +48,7 @@ export class PriceUpdatePlanner {
   private pendingForce = false;
 
   constructor(opts: {
-    reader: StacksPriceReader;
+    reader: ContractSymbolPriceReader;
     submitter: PriceUpdateTransactionSubmitter;
     heartbeatMs: number;
     minSubmitIntervalMs: number;

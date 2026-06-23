@@ -22,7 +22,7 @@ interface ReadOnlyResult {
  * deviation baselines from the actual on-chain values so we don't redundantly re-push prices that
  * are already current.
  */
-export class StacksPriceReader {
+export class ContractSymbolPriceReader {
   private readonly client: CoreRpcClient;
   /** Principal used as the `sender` of read-only calls (value is irrelevant). */
   private readonly sender: string;
@@ -37,8 +37,8 @@ export class StacksPriceReader {
   /**
    * Reads `.pyth-lazer-storage.get-price` for a feed.
    * @param feedId - Pyth Lazer numeric feed id.
-   * @returns The stored record, or `null` if the feed has never been published
-   *   (the call returned an `(err ...)`).
+   * @returns The stored record, or `null` if the feed has never been published (the call returned
+   *   an `(err ...)`).
    */
   async getPrice(feedId: number): Promise<OnChainPrice | null> {
     const cv = await this.callReadOnly('pyth-lazer-storage', 'get-price', [Cl.uint(feedId)]);
