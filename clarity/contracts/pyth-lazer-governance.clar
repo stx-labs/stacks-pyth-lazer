@@ -27,6 +27,8 @@
 (define-constant ERR_UNAUTHORIZED (err u4003))
 ;; Protocol is paused.
 (define-constant ERR_PAUSED (err u4004))
+;; Disallow changing own governance role
+(define-constant ERR_CANNOT_CHANGE_OWN_GOVERNANCE (err u4005))
 
 ;; Role IDs: opaque 1-byte discriminators (NOT bitflags), used as map keys.
 (define-constant ROLE_GOVERNANCE 0x00) ;; manage signers/fee/decoder/threshold/writer + roles
@@ -181,6 +183,12 @@
 	(begin
 		(try! (assert-active))
 		(try! (assert-governance contract-caller))
+		;; Cannot modify own governance role
+		;; This prevents the case where last admin removes themselves
+		(asserts! (not (and
+				(is-eq role ROLE_GOVERNANCE)
+				(is-eq who contract-caller)))
+			ERR_CANNOT_CHANGE_OWN_GOVERNANCE)
 		(if enabled
 			(map-set roles { who: who, role: role } true)
 			(map-delete roles { who: who, role: role }))

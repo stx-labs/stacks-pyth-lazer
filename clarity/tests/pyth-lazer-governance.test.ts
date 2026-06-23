@@ -9,6 +9,7 @@ const wallet1 = accounts.get("wallet_1")!; // holds no roles
 const GOV = "pyth-lazer-governance";
 const ERR_UNAUTHORIZED = 4003;
 const ERR_PAUSED = 4004;
+const ERR_CANNOT_CHANGE_OWN_GOVERNANCE = 4005;
 
 // Role IDs are opaque 1-byte discriminators (not bitflags); 0x00 is valid.
 const ROLE_GOVERNANCE = Cl.buffer(Uint8Array.of(0));
@@ -60,12 +61,42 @@ describe("pyth-lazer-governance: roles", () => {
     expect(setRole(wallet1, ROLE_PAUSE, true, wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
 
-  it("supports handing off control: grant the new holder, revoke the deployer", () => {
+  it("supports handing off control: grant the new holder, who then revokes the deployer", () => {
     setRole(wallet1, ROLE_GOVERNANCE, true);
-    expect(setRole(deployer, ROLE_GOVERNANCE, false).result).toBeOk(Cl.bool(true));
+    // The deployer can't revoke its own governance role, so the new holder does it.
+    expect(setRole(deployer, ROLE_GOVERNANCE, false, wallet1).result).toBeOk(Cl.bool(true));
     // deployer can no longer act as governance; wallet1 can
     expect(setFee(1n, deployer).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
     expect(setFee(1n, wallet1).result).toBeOk(Cl.bool(true));
+  });
+
+  it("forbids changing your own governance role, so admin control can't be lost", () => {
+    // The sole governance holder cannot remove itself...
+    expect(setRole(deployer, ROLE_GOVERNANCE, false).result).toBeErr(
+      Cl.uint(ERR_CANNOT_CHANGE_OWN_GOVERNANCE),
+    );
+    expect(hasRole(deployer, ROLE_GOVERNANCE)).toBeBool(true);
+
+    // ...nor self-grant the role it already holds (a no-op, barred for simplicity).
+    expect(setRole(deployer, ROLE_GOVERNANCE, true).result).toBeErr(
+      Cl.uint(ERR_CANNOT_CHANGE_OWN_GOVERNANCE),
+    );
+
+    // Even with a second holder present, each holder can only revoke the *other*.
+    setRole(wallet1, ROLE_GOVERNANCE, true);
+    expect(setRole(deployer, ROLE_GOVERNANCE, false).result).toBeErr(
+      Cl.uint(ERR_CANNOT_CHANGE_OWN_GOVERNANCE),
+    );
+    expect(setRole(wallet1, ROLE_GOVERNANCE, false, wallet1).result).toBeErr(
+      Cl.uint(ERR_CANNOT_CHANGE_OWN_GOVERNANCE),
+    );
+    // Revoking the *other* holder is allowed.
+    expect(setRole(wallet1, ROLE_GOVERNANCE, false).result).toBeOk(Cl.bool(true));
+  });
+
+  it("still lets you revoke your OWN pause role (a lost last-pauser is recoverable)", () => {
+    setRole(deployer, ROLE_PAUSE, false);
+    expect(hasRole(deployer, ROLE_PAUSE)).toBeBool(false);
   });
 });
 

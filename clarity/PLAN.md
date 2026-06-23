@@ -374,6 +374,14 @@ owner model (§3.6) — RBAC is a strict superset. All gates check `contract-cal
 hold a role. This also implements what were items #3 (role separation) and a pause capability
 from the original future-work list.
 
+**No-lockout invariant:** `set-role` forbids changing your *own* `governance` role
+(`ERR_CANNOT_CHANGE_OWN_GOVERNANCE`, `u4005`). Because revoking already requires the caller to
+hold governance, every legal revoke is one holder removing a *different* holder, so the governance
+set can never reach zero — the last holder is structurally unremovable and admin control can't be
+permanently lost. (Clarity can't read a map's size, so the invariant is enforced this way, not by
+counting.) Self-granting is barred in the same check purely for tidiness — the caller already holds
+the role, so it was always a no-op. Pause is exempt — a lost last-pauser is recoverable via a grant.
+
 **Still future work** (none needed for v1; the role API admits them without breaking reads/writes):
 - **Timelocked sensitive updates** — the highest-value hardening; significant enough for its own
   PR. See **§6b**.
@@ -385,10 +393,12 @@ from the original future-work list.
 - Finer-grained roles (signer-manager vs fee-setter vs upgrader) — add role IDs.
 - Lazer-signed governance: accept signed governance messages from Pyth (parsed like the EVM
   contract's `updateTrustedSigner` authority) instead of a Stacks-principal role.
-- ~~Two-step role handoff (`set-pending` / `accept`)~~ — **low priority now.** The additive
-  `set-role` model (grant/revoke, vs the old `set-admin` *replace*) already removes the "fat-finger
-  to a dead address bricks the contract" risk that motivates handoff: a bad grant never revokes
-  your own role. Remaining lockout is operational sequencing (grant new → verify → revoke old).
+- ~~Two-step role handoff (`set-pending` / `accept`)~~ — **handled.** The additive `set-role` model
+  (grant/revoke, vs the old `set-admin` *replace*) already removes the "fat-finger to a dead address
+  bricks the contract" risk: a bad grant never revokes your own role. The no-lockout invariant above
+  then makes the safe sequence *mandatory* — since you can't revoke yourself, hand-off is necessarily
+  grant new → new holder revokes old, which also forces the new account to prove it's live before the
+  old one leaves. A dedicated `set-pending`/`accept` flow would add little over this.
 
 ### 6b. Governance — timelocked sensitive updates (future PR)
 
@@ -413,7 +423,8 @@ is a *separate* key, its holder becomes a real veto.
   execute, the oracle goes dark, so `GOVERNANCE_DELAY` must be comfortably shorter than the margin
   kept between "add new signer" and "old signer expires." Timelock guards *injection*; pause guards
   the opposite direction (stop trusting a compromised signer *now*) — keep both.
-- Error codes continue governance's `u40xx` range (next free: `u4005`, `u4006`).
+- Error codes continue governance's `u40xx` range (next free: `u4006`, `u4007` — `u4005` is now
+  `ERR_CANNOT_CHANGE_OWN_GOVERNANCE`).
 
 ---
 
