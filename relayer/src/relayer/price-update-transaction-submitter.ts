@@ -1,8 +1,8 @@
 import { logger } from '@stacks/api-toolkit';
+import { createCoreRpcClient, type CoreRpcClient } from '@stacks/rpc-client';
 import {
   Cl,
   broadcastTransaction,
-  fetchNonce,
   getAddressFromPrivateKey,
   makeContractCall,
   type TxBroadcastResult,
@@ -33,12 +33,22 @@ export interface SubmitResult {
   error?: string;
 }
 
+/** A transaction we have broadcast but not yet confirmed mined. */
+interface PendingTx {
+  /** Nonce the tx was signed with. */
+  nonce: bigint;
+  /** Fee (microSTX) the tx was broadcast with; the floor for any replacement. */
+  fee: bigint;
+}
+
 /**
  * Builds, signs, and broadcasts the `verify-and-update-price-feeds` contract call with the signed
- * `evm` payload and the blessed decoder. The planner serializes calls (one in-flight at a time), so
- * this tracks the sender nonce locally and only refetches it from chain on first use or after a
- * nonce-related rejection — the node's confirmed nonce would lag behind our still-unconfirmed
- * submissions.
+ * `evm` payload and the blessed decoder.
+ *
+ * Only one tx is ever in flight: each call reads the chain's confirmed nonce and either submits a
+ * fresh tx (previous one mined, or none) or — if a previous tx is still unmined — *replaces* it by
+ * rebroadcasting at the same nonce with a higher fee (Stacks mempool replace-by-fee). This keeps the
+ * freshest price moving toward the chain and avoids paying to mine a now-stale update.
  */
 export class PriceUpdateTransactionSubmitter {
   private readonly senderKey;
@@ -47,8 +57,12 @@ export class PriceUpdateTransactionSubmitter {
   private readonly rpcBaseUrl: string;
   private readonly senderAddress: string;
   private readonly txFeeMicroStx?: number;
-  /** Next nonce to use; `undefined` forces a refetch from chain. */
-  private nonce?: bigint;
+  private readonly feeBumpPercent: bigint;
+  private readonly maxFeeMicroStx?: bigint;
+  /** Core RPC client, used to read the sender's confirmed nonce. */
+  private readonly rpc: CoreRpcClient;
+  /** The last broadcast tx, tracked until a later read shows it confirmed. */
+  private pending?: PendingTx;
 
   constructor(options: {
     senderKey: string;
@@ -56,18 +70,28 @@ export class PriceUpdateTransactionSubmitter {
     deployer: string;
     rpcBaseUrl: string;
     txFeeMicroStx?: number;
+    feeBumpPercent: number;
+    maxFeeMicroStx?: number;
   }) {
     this.senderKey = options.senderKey;
     this.network = options.network;
     this.deployer = options.deployer;
     this.rpcBaseUrl = options.rpcBaseUrl;
     this.txFeeMicroStx = options.txFeeMicroStx;
+    this.feeBumpPercent = BigInt(options.feeBumpPercent);
+    this.maxFeeMicroStx =
+      options.maxFeeMicroStx != null ? BigInt(options.maxFeeMicroStx) : undefined;
     this.senderAddress = getAddressFromPrivateKey(this.senderKey, this.network);
+    this.rpc = createCoreRpcClient({ baseUrl: this.rpcBaseUrl });
   }
 
   async submit(evm: Buffer): Promise<SubmitResult> {
     try {
-      const nonce = await this.nextNonce();
+      const target = await this.resolveTarget();
+      if (!target) {
+        return { ok: false, error: 'fee ceiling reached; cannot replace pending tx' };
+      }
+
       const transaction = await makeContractCall({
         contractAddress: this.deployer,
         contractName: ORACLE_CONTRACT_NAME,
@@ -76,42 +100,54 @@ export class PriceUpdateTransactionSubmitter {
         senderKey: this.senderKey,
         network: this.network,
         client: { baseUrl: this.rpcBaseUrl },
-        nonce,
-        ...(this.txFeeMicroStx != null ? { fee: this.txFeeMicroStx } : {}),
+        nonce: target.nonce,
+        // A replacement must set an explicit (higher) fee; a fresh tx uses the
+        // configured fixed fee or lets the SDK estimate it.
+        ...(target.fee != null ? { fee: target.fee } : {}),
         // The oracle transfers the governance fee from tx-sender, so post
         // conditions can't be enumerated up front — allow them.
         postConditionMode: 'allow',
       });
 
+      // The actual fee the tx carries (estimated or fixed) — the floor for any
+      // future replacement of this nonce.
+      const fee = transaction.auth.spendingCondition.fee;
       const result = await broadcastTransaction({
         transaction,
         network: this.network,
         client: { baseUrl: this.rpcBaseUrl },
       });
-      return this.handleBroadcastResult(result, nonce);
+      return this.handleBroadcastResult(result, target.nonce, fee, target.replacing);
     } catch (error) {
-      // Build/network failure: drop the cached nonce so the next attempt refetches.
-      this.nonce = undefined;
+      // Build/network failure: drop pending so the next attempt re-reads the chain.
+      this.pending = undefined;
       const message = error instanceof Error ? error.message : String(error);
       logger.error(error, `${this.constructor.name} failed to build/broadcast update: ${message}`);
       return { ok: false, error: message };
     }
   }
 
-  private handleBroadcastResult(result: TxBroadcastResult, usedNonce: bigint): SubmitResult {
+  private handleBroadcastResult(
+    result: TxBroadcastResult,
+    nonce: bigint,
+    fee: bigint,
+    replacing: boolean
+  ): SubmitResult {
     if (!('error' in result)) {
-      // A mined tx consumes its nonce even if the contract later aborts, so
-      // optimistically advance to chain the next submission.
-      this.nonce = usedNonce + 1n;
+      this.pending = { nonce, fee };
       logger.info(
-        { txId: result.txid, nonce: Number(usedNonce) },
-        `${this.constructor.name} broadcast price update`
+        { txId: result.txid, nonce: Number(nonce), fee: Number(fee), replacing },
+        replacing
+          ? `${this.constructor.name} replaced unmined update (RBF)`
+          : `${this.constructor.name} broadcast price update`
       );
       return { ok: true, txId: result.txid };
     }
 
+    // A nonce rejection means our assumption about the pending tx is wrong; drop
+    // it so the next attempt re-reads the chain from scratch.
     if (NONCE_REJECTION_REASONS.has(result.reason)) {
-      this.nonce = undefined; // stale nonce; refetch next attempt
+      this.pending = undefined;
     }
     logger.error(
       { reason: result.reason, error: result.error, txId: result.txid },
@@ -120,14 +156,61 @@ export class PriceUpdateTransactionSubmitter {
     return { ok: false, error: `${result.reason}: ${result.error}` };
   }
 
-  private async nextNonce(): Promise<bigint> {
-    if (this.nonce === undefined) {
-      this.nonce = await fetchNonce({
-        address: this.senderAddress,
-        network: this.network,
-        client: { baseUrl: this.rpcBaseUrl },
-      });
+  /**
+   * Decide what nonce/fee the next submission should use: replace the pending tx
+   * if it is still unmined, otherwise submit fresh at the chain's confirmed nonce.
+   * @returns The target, or `null` if a replacement is needed but the fee ceiling
+   *   has been reached.
+   */
+  private async resolveTarget(): Promise<{
+    nonce: bigint;
+    fee?: bigint;
+    replacing: boolean;
+  } | null> {
+    const confirmedNonce = await this.fetchConfirmedNonce();
+
+    // Pending tx still unmined (the chain hasn't advanced past its nonce): replace
+    // it at the same nonce with a higher fee.
+    if (this.pending && confirmedNonce <= this.pending.nonce) {
+      const fee = this.bumpFee(this.pending.fee);
+      if (fee === null) return null;
+      return { nonce: this.pending.nonce, fee, replacing: true };
     }
-    return this.nonce;
+
+    // Otherwise the pending tx (if any) has mined: submit fresh at the confirmed
+    // nonce, letting the fee be fixed-or-estimated.
+    return {
+      nonce: confirmedNonce,
+      fee: this.txFeeMicroStx != null ? BigInt(this.txFeeMicroStx) : undefined,
+      replacing: false,
+    };
+  }
+
+  /**
+   * Reads the sender's confirmed account nonce from the core node. We need the
+   * *confirmed* value (not a mempool-aware "possible next nonce") so we can detect
+   * that our own unmined tx is still pending and replace it.
+   */
+  private async fetchConfirmedNonce(): Promise<bigint> {
+    const account = await this.rpc.request('GET', '/v2/accounts/{principal}', {
+      params: { path: { principal: this.senderAddress }, query: { proof: 0 } },
+    });
+    return BigInt(account.nonce);
+  }
+
+  /**
+   * Raise a fee by the configured percent for a replacement, clamped to the
+   * optional ceiling.
+   * @param fee - The fee of the tx being replaced.
+   * @returns The (strictly higher) replacement fee, or `null` if it cannot exceed
+   *   the previous fee without breaching the ceiling.
+   */
+  private bumpFee(fee: bigint): bigint | null {
+    const raised = fee + (fee * this.feeBumpPercent) / 100n;
+    const bumped = raised > fee ? raised : fee + 1n; // guarantee strictly higher
+    if (this.maxFeeMicroStx == null) return bumped;
+    if (bumped <= this.maxFeeMicroStx) return bumped;
+    // Use the ceiling itself if it still beats the previous fee, else give up.
+    return this.maxFeeMicroStx > fee ? this.maxFeeMicroStx : null;
   }
 }

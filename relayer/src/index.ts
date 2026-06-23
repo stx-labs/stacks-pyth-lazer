@@ -26,6 +26,8 @@ async function initBackgroundServices(config: ApiConfig) {
     network: ENV.NETWORK,
     deployer: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
     txFeeMicroStx: ENV.TX_SUBMITTER_FEE_USTX,
+    feeBumpPercent: ENV.TX_SUBMITTER_FEE_BUMP_PERCENT,
+    maxFeeMicroStx: ENV.TX_SUBMITTER_MAX_FEE_USTX,
     rpcBaseUrl: nodeRpcBaseUrl,
   });
 

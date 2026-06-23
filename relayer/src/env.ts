@@ -40,6 +40,14 @@ const schema = Type.Object({
   TX_SUBMITTER_PRIVATE_KEY: Type.String(),
   /** Optional fixed tx fee (microSTX) for update txs. If unset, the fee is estimated. */
   TX_SUBMITTER_FEE_USTX: Type.Optional(Type.Integer({ minimum: 0 })),
+  /**
+   * When a newer update is due but our previous tx is still unmined, replace it
+   * (same nonce, higher fee). This is the percent the fee is raised each round.
+   * Defaults to 25.
+   */
+  TX_SUBMITTER_FEE_BUMP_PERCENT: Type.Integer({ default: 25, minimum: 1 }),
+  /** Optional ceiling (microSTX) on the fee when escalating replacements. */
+  TX_SUBMITTER_MAX_FEE_USTX: Type.Optional(Type.Integer({ minimum: 0 })),
 
   /**
    * Push a feed when its price moves at least this many basis points from the value last written
