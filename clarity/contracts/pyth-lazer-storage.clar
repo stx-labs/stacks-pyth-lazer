@@ -9,8 +9,8 @@
 
 ;;;; Constants
 
-;; Caller of `write` is not the authorized writer, or a setter caller is not the
-;; governance admin.
+;; Caller of `write` is not the authorized writer. (set-authorized-writer delegates its
+;; auth to governance, so it surfaces governance's ERR_UNAUTHORIZED u4003 instead.)
 (define-constant ERR_UNAUTHORIZED (err u3001))
 ;; No record stored for this feed-id.
 (define-constant ERR_PRICE_FEED_NOT_FOUND (err u3003))
@@ -141,15 +141,17 @@
 		existing (> publish-time (get publish-time existing))
 		true))
 
-;;;; Admin (governance admin only -- single admin principal, decision #1)
+;;;; Admin (governance role, via the governance contract)
 
-;; Re-point storage at a redeployed oracle. Gated by governance's admin so the
-;; whole system shares one admin (decision #1). Checks `contract-caller` (not
-;; `tx-sender`) so the admin must call directly -- avoids the tx.origin phishing
-;; vector and lets a contract (multisig/DAO) hold admin (matches governance's gates).
+;; Re-point storage at a redeployed oracle. Auth is delegated to governance: the caller
+;; must hold the governance role and the protocol must be active. We pass our own
+;; `contract-caller` (the direct caller) to governance's check, so the role-holder must
+;; call storage directly -- avoids the tx.origin phishing vector and lets a contract
+;; (multisig/DAO) hold the role.
 (define-public (set-authorized-writer (new-writer principal))
 	(begin
-		(asserts! (is-eq contract-caller (contract-call? .pyth-lazer-governance get-admin)) ERR_UNAUTHORIZED)
+		(try! (contract-call? .pyth-lazer-governance assert-active))
+		(try! (contract-call? .pyth-lazer-governance assert-governance contract-caller))
 		(var-set authorized-writer new-writer)
-		(print { type: "authorized-writer", action: "updated", data: new-writer })
+		(print { type: "authorized-writer", action: "updated", data: { new-writer: new-writer } })
 		(ok true)))

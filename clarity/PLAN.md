@@ -38,7 +38,7 @@ This repo (`stacks-pyth-lazer`) is a clean re-implementation targeting the Lazer
 | Feed identifier | 32-byte price-feed id (`buff 32`) | small **`uint32`** feed id |
 | Timestamp units | seconds | **microseconds** (`timestampUs`) |
 | Envelope | `PNAU` magic → VAA → accumulator update | `EVM` format magic → 65-byte sig → payload |
-| Governance | Wormhole governance VAAs (`PTGM`) | Single admin principal (defaults to deployer), no Wormhole; see §6 |
+| Governance | Wormhole governance VAAs (`PTGM`) | Role-based access (governance + pause roles), no Wormhole; see §6 |
 | Clarity contracts needed | wormhole-core, wormhole-traits, decoder, storage, oracle, governance | **No wormhole layer**, no Merkle code — see §5 |
 
 **Net effect:** we delete the entire Wormhole layer and all Merkle-proof verification, and
@@ -157,9 +157,16 @@ reference contracts expose only a **single owner / top-authority**:
 - The "Pyth DAO / Pythian council" governance (the `OP-PIP-*` proposals that assign signers)
   is an **off-chain** process; on-chain it resolves to one privileged address making the call.
 
-So "single admin, defaulting to the deployer" is **not** a deviation from Pyth's design — it
-*is* Pyth's design, with the deployer standing in for what is a DAO/multisig address in
-production. This settles decision #1 below.
+So "single privileged authority, defaulting to the deployer" is **not** a deviation from
+Pyth's design — it *is* Pyth's design, with the deployer standing in for what is a DAO/multisig
+address in production.
+
+**Update (Phase 5):** v1 originally shipped exactly this — one `contract-admin` principal. It
+has since been generalized to **role-based access control** (a `{who, role} → bool` grant map,
+mirroring `stx-labs/usdcx-token`) with two roles: **governance** (the former admin powers) and
+**pause** (an emergency stop). This is a strict superset of the single-owner model — granting
+both roles to one principal reproduces it — so it stays aligned with Pyth's design while adding
+a separable pause key. This supersedes decision #1 below; see §6a.
 
 ---
 
@@ -227,7 +234,8 @@ decoder.
             ▼                                              │ reads signer list
  ┌──────────────────────────────────────────────────────────────────────┐
  │  pyth-lazer-governance   ── IMMUTABLE ──                               │
- │  admin · trusted signers {pubkey, expires-at} · fee · stale threshold  │
+ │  roles {governance,pause} · trusted signers {pubkey,expires-at} ·      │
+ │  fee · fee-recipient · stale threshold · pause switch                  │
  └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -244,15 +252,17 @@ Contracts:
   4. check payload `FORMAT_MAGIC`, parse header + feeds → price records.
   No Merkle proof code (unlike `pyth-pnau-decoder-v3`).
 - **`pyth-lazer-storage`** ⟨immutable⟩ — `feed-id (uint) → price record`, a monotonic-publish-
-  time guard, one admin-settable `authorized-writer`, and `print` events. Generous schema
-  (optionals for deferred fields) so it never needs a shape change. The **stable read anchor**
-  (readers call it directly); the staleness read pulls the threshold from governance (µs→s).
+  time guard, an `authorized-writer` re-pointable by a governance-role holder, and `print`
+  events. Generous schema (optionals for deferred fields) so it never needs a shape change. The
+  **stable read anchor** (readers call it directly); the staleness read pulls the threshold from
+  governance (µs→s).
 - **`pyth-lazer-oracle-v1`** — thin orchestrator + stable **write** entry:
-  `verify-and-update-price-feeds` (takes the `<decoder>` param), charges fee. Hardcodes
-  `.pyth-lazer-storage` + `.pyth-lazer-governance`.
-- **`pyth-lazer-governance`** ⟨immutable⟩ — config state: admin (defaults to deployer, §3.6),
-  trusted-signer list `{pubkey, expires-at}`, fee, stale threshold, + admin-gated
-  setters/getters. Carries the §6a improvement TODO as a header comment.
+  `verify-and-update-price-feeds` (takes the `<decoder>` param), refuses to run while paused,
+  charges fee. Hardcodes `.pyth-lazer-storage` + `.pyth-lazer-governance`.
+- **`pyth-lazer-governance`** ⟨immutable⟩ — config state + access control: a `{who, role}` grant
+  map (governance + pause roles, deployer granted both at deploy, §3.6/§6a), trusted-signer list
+  `{pubkey, expires-at}`, fee + fee-recipient, stale threshold, and a pause switch, behind
+  role-gated setters/getters.
 
 **Naming convention:** updateable contracts carry a `-vN` suffix in their contract id
 (`pyth-lazer-decoder-v1`, `pyth-lazer-oracle-v1`) so a successor can be deployed and switched
@@ -271,7 +281,7 @@ name and `;; Version:` carries the number.)
 
 | # | Decision | Choice | Status |
 |---|---|---|---|
-| 1 | Governance / admin authorization | Single `contract-admin` principal, defaults to deployer (see §3.6, §6a) | ✅ Decided |
+| 1 | Governance / admin authorization | ~~Single `contract-admin` principal, defaults to deployer~~ → **superseded** by role-based access (governance + pause roles); deployer granted both at deploy (see §3.6, §6a) | ♻️ Superseded |
 | 2 | Feed-id representation | Native `uint` (not `buff 4`/`buff 32`) — see §6.2 | ✅ Decided |
 | 3 | Timestamp unit in API | Store **microseconds**; convert to seconds only at the staleness comparison | ✅ Decided |
 | 4 | Feed properties persisted in v1 | Decoder persists minimal (`price`, `exponent`, `confidence`, publish/feed time); storage *schema* reserves the full set as optionals (§6.4) | ✅ Decided |
@@ -296,7 +306,7 @@ real 32-byte hash with no integer meaning — not the case here.)
 Lazer "channels" are publish-cadence tiers (`RealTime`, `FixedRate50/200/1000` ms). The
 payload header carries a `channel` byte, and the signature covers it, so it is trustworthy
 metadata — not a security control. v1 **records/emits the channel and accepts any value**;
-staleness already governs freshness. An admin-set channel allowlist can be added later if a
+staleness already governs freshness. A governance-set channel allowlist can be added later if a
 consumer needs a guaranteed cadence.
 
 ### 6.4 Upgradeability & contract split (decisions #8 / #9)
@@ -311,19 +321,19 @@ Applying it:
 - **Only `pyth-lazer-decoder-v1` is swappable.** It owns the security-critical hot path
   (signature recovery + trusted-signer validation), so a bug there *is* fixable. The oracle
   receives it as a trait parameter and validates `(contract-of decoder)` against governance's
-  blessed decoder principal; the admin re-blesses a `decoder-v2` to upgrade. No execution-plan
+  blessed decoder principal; a governance-role holder re-blesses a `decoder-v2` to upgrade. No execution-plan
   graph, no `check-execution-flow`.
 - **`pyth-lazer-storage` is immutable** — dumb maps + a self-protecting monotonic-publish-time
-  guard + one admin-settable `authorized-writer`. The only thing that could force a storage
+  guard + one governance-settable `authorized-writer`. The only thing that could force a storage
   replacement is a *record-shape* change, which Clarity can't do in place; we pre-empt it by
   defining the record generously now, using `(optional …)` for fields the v1 decoder doesn't
   populate yet (this refines #4). Storage is the stable read anchor.
-- **`pyth-lazer-governance` is immutable** — pure config state (admin, signers, fee,
-  threshold) + admin-gated setters. The security-critical validation logic is deliberately
-  kept *out* of it (it lives in the swappable decoder), which is what makes immutability safe.
-  Its residual logic (signer add/update/remove) is admin-only and low-severity (expiry
-  mitigates a stuck signer). Reassigning the admin to a multisig/DAO is a value change, not a
-  contract change.
+- **`pyth-lazer-governance` is immutable** — pure config state (role grants, signers, fee,
+  threshold, pause switch) + role-gated setters. The security-critical validation logic is
+  deliberately kept *out* of it (it lives in the swappable decoder), which is what makes
+  immutability safe. Its residual logic (signer add/update/remove) is governance-only and
+  low-severity (expiry mitigates a stuck signer). Reassigning a role to a multisig/DAO is a
+  value change (a grant), not a contract change.
 - **`pyth-lazer-oracle-v1`** is a thin orchestrator and the stable *write* entry. It hardcodes
   `.pyth-lazer-storage` + `.pyth-lazer-governance` (compile-time refs — a future oracle
   re-points to the *same* storage via its `authorized-writer`). Redeployed only for rare
@@ -336,8 +346,8 @@ storage be the permanent read anchor.
 *Rejected alternatives:* (a) immutable-everything → can't fix a validation bug; (b)
 admin-settable pointers everywhere → in Clarity that requires passing trait refs as params +
 governance validation anyway, so it collapses toward the old-bridge execution-plan; (c) full
-execution-plan + `check-execution-flow` → unjustified complexity given a single admin and
-re-derivable state.
+execution-plan + `check-execution-flow` → unjustified complexity given role-gated authorization
+and re-derivable state.
 
 **Replay protection — no permanent per-message state needed.** Price updates are
 *last-write-wins*: storage only accepts a feed update whose publish-time is **newer** than the
@@ -346,61 +356,117 @@ harmless re-write. State is therefore **bounded by the number of feeds** (one ma
 not by the number of messages ever seen — unlike consume-once bridge/governance actions, which
 need a growing set of consumed message hashes. No such set is required here.
 
-### 6a. Governance — future improvements (carry into the governance contract as a TODO)
+### 6a. Governance — access-control model
 
-v1 deliberately ships the minimum: one admin principal = the deployer. The following are
-**known ways to harden this later**; none are needed for a working v1, but the contract
-should be written so they can be added without breaking the read/write API. Drop this block
-in as a header comment in `pyth-lazer-governance` so it isn't lost:
+**Implemented (Phase 5):** role-based access control, mirroring `stx-labs/usdcx-token`. Roles
+are opaque 1-byte IDs (**not** bitflags — `0x00` is a valid id) keyed in a `{who, role} → bool`
+grant map, so each grant is independent and granting one role can never disturb another:
 
-```clarity
-;; TODO(governance): v1 uses a single `contract-admin` principal, defaulting to the deployer.
-;; This mirrors Pyth's own reference contracts (single owner / top-authority). Options to
-;; harden governance in future versions, in rough order of effort:
-;;   1. Two-step admin handoff (set-pending-admin / accept-admin) to avoid fat-fingering a
-;;      transfer to an unusable address.
-;;   2. Reassign admin to a Stacks multisig principal (no code change — just transfer admin).
-;;   3. Multiple admins / role separation (e.g. signer-manager vs fee-setter vs upgrader).
-;;   4. Fine-grained, per-action permissions (allowlist of (principal, action) pairs).
-;;   5. Lazer-signed governance: accept signed governance messages from Pyth (parsed like the
-;;      EVM contract's updateTrustedSigner authority) instead of a Stacks-principal admin.
-;;   6. Timelock / delay on sensitive changes (trusted-signer rotation, fee hikes, upgrades).
-```
+- **`governance`** (`0x00`) — manage trusted signers, fee, fee-recipient, decoder, stale
+  threshold, the storage `authorized-writer`, and role grants themselves.
+- **`pause`** (`0x01`) — toggle the protocol pause switch (emergency stop). While paused, the
+  oracle update path and every governance config change are blocked; only `pause`/`unpause`
+  remain callable, so a pause-role holder can always recover.
+
+The deployer is granted **both** roles at deploy, which exactly reproduces the original single-
+owner model (§3.6) — RBAC is a strict superset. All gates check `contract-caller` (not
+`tx-sender`, avoiding the tx.origin phishing vector), and a contract (multisig/DAO/timelock) can
+hold a role. This also implements what were items #3 (role separation) and a pause capability
+from the original future-work list.
+
+**No-lockout invariant:** `set-role` forbids changing your *own* `governance` role
+(`ERR_CANNOT_CHANGE_OWN_GOVERNANCE`, `u4005`). Because revoking already requires the caller to
+hold governance, every legal revoke is one holder removing a *different* holder, so the governance
+set can never reach zero — the last holder is structurally unremovable and admin control can't be
+permanently lost. (Clarity can't read a map's size, so the invariant is enforced this way, not by
+counting.) Self-granting is barred in the same check purely for tidiness — the caller already holds
+the role, so it was always a no-op. Pause is exempt — a lost last-pauser is recoverable via a grant.
+
+**Still future work** (none needed for v1; the role API admits them without breaking reads/writes):
+- **Timelocked sensitive updates** — the highest-value hardening; significant enough for its own
+  PR. See **§6b**.
+- **Bounded parameters** — cap `set-fee` at a sane max and floor `set-stale-price-threshold`, so
+  even a compromised governance key can't set an extortionate fee or disable staleness. ~3 lines,
+  enforced at write; no timelock needed.
+- Hold a role in a Stacks multisig/DAO principal (no code change — just a grant). Arguably gets
+  most of the compromise-resistance of a timelock on its own.
+- Finer-grained roles (signer-manager vs fee-setter vs upgrader) — add role IDs.
+- Lazer-signed governance: accept signed governance messages from Pyth (parsed like the EVM
+  contract's `updateTrustedSigner` authority) instead of a Stacks-principal role.
+- ~~Two-step role handoff (`set-pending` / `accept`)~~ — **handled.** The additive `set-role` model
+  (grant/revoke, vs the old `set-admin` *replace*) already removes the "fat-finger to a dead address
+  bricks the contract" risk: a bad grant never revokes your own role. The no-lockout invariant above
+  then makes the safe sequence *mandatory* — since you can't revoke yourself, hand-off is necessarily
+  grant new → new holder revokes old, which also forces the new account to prove it's live before the
+  old one leaves. A dedicated `set-pending`/`accept` flow would add little over this.
+
+### 6b. Governance — timelocked sensitive updates (future PR)
+
+**Status: not implemented; scope as a standalone PR.** A "two-stage update" (propose → delay →
+execute) on the *security-critical* setters turns the catastrophic attack — a compromised
+governance key injecting a malicious trusted signer or decoder — from instant into delayed and
+**observable**, giving a reaction window. It composes with the **pause role** (§6a): because pause
+is a *separate* key, its holder becomes a real veto.
+
+- **Scope to the sensitive setters only:** `set-trusted-signers`, `set-decoder`, and granting
+  `ROLE_GOVERNANCE`. Leave `set-fee` / `set-stale-price-threshold` / `set-fee-recipient` instant
+  (low severity; bounded params above cover those).
+- **Shape per setter:** `propose-X` (governance role) records the value + `eta = burn-block-height
+  + GOVERNANCE_DELAY` in an `(optional {...})` pending var and emits a `proposed` event with the
+  eta; `execute-X` (governance role) applies it once `burn-block-height >= eta` and clears pending;
+  `cancel-pending-X` (**pause** role) vetoes without halting price updates. Use `burn-block-height`
+  (Bitcoin, ~10 min/block, monotonic) for the delay, not the fast/variable Nakamoto stacks clock.
+- **Watcher-grade events are load-bearing:** the timelock only helps if something is watching for
+  the `proposed`+`eta` event and can call `cancel`/`pause` in time. Emit the value and the eta.
+- **Key tradeoff to settle — delay vs. signer-expiry margin:** a timelock on `set-trusted-signers`
+  fights *legitimate* fast rotation. If the old signer expires before a delayed replacement can
+  execute, the oracle goes dark, so `GOVERNANCE_DELAY` must be comfortably shorter than the margin
+  kept between "add new signer" and "old signer expires." Timelock guards *injection*; pause guards
+  the opposite direction (stop trusting a compromised signer *now*) — keep both.
+- Error codes continue governance's `u40xx` range (next free: `u4006`, `u4007` — `u4005` is now
+  `ERR_CANNOT_CHANGE_OWN_GOVERNANCE`).
 
 ---
 
 ## 7. Operations — the calls you make
 
-Planned function set (names may shift in implementation). In the old Wormhole bridge every
-admin action was a signed governance VAA; with single-admin Lazer they become plain
-admin `contract-call?`s.
+In the old Wormhole bridge every admin action was a signed governance VAA; under Lazer they
+become plain `contract-call?`s, gated by the **governance** role (the **pause** role gates only
+the emergency stop). The deployer holds both at deploy (§6a).
 
-**Bootstrap — required once after deploy (admin only):**
-- `set-trusted-signer (pubkey (buff 33)) (expires-at uint)` — register Pyth's current Lazer
-  signer key + expiry. **Mandatory: nothing verifies until this is set** (Pyth's EVM guide
-  flags this as the required step). `expires-at = u0` removes a signer.
+**Bootstrap — required once after deploy (governance role):**
+- `set-trusted-signers (signers (list 16 {pubkey, expires-at}))` — register Pyth's current Lazer
+  signer key(s) + expiry. **Mandatory: nothing verifies until this is set** (Pyth's EVM guide
+  flags this as the required step). Pass the full list to add/remove.
 
-**Occasional / ongoing (admin only):**
-- `set-trusted-signer` again — **key rotation**: add the new key before the old expires.
-- `set-fee (...)` — change the per-update fee (default `u0`).
+**Occasional / ongoing (governance role):**
+- `set-trusted-signers` again — **key rotation**: add the new key before the old expires.
+- `set-fee (uint)` / `set-fee-recipient (principal)` — change the per-update fee (default `u0`)
+  and where it's routed.
 - `set-stale-price-threshold (seconds uint)` — override the default staleness window.
-- `set-admin` / two-step handoff — reassign admin to a multisig/DAO (§6a).
+- `set-role (who principal) (role (buff 1)) (enabled bool)` — grant/revoke a role; e.g. hand
+  governance to a multisig (grant it, revoke the deployer), or assign a dedicated pause key (§6a).
 - `set-decoder (<decoder-trait>)` (governance) — bless a new `decoder-v2`; relayers then pass it.
 - `set-authorized-writer (principal)` (storage) — re-point to a redeployed oracle.
 
-**Usage — anyone (not the admin):**
-- `verify-and-update-price-feeds (update (buff N))` on `pyth-lazer-oracle-v1` — submit a Lazer
-  update; verifies signature, writes prices, pays fee. Relayers/dapps call this.
-- `read-price-feed (feed-id uint)` / `get-price (feed-id uint)` — consumers read prices.
+**Emergency stop (pause role):**
+- `pause` / `unpause` — halt and resume the oracle update path and all governance config
+  changes. `unpause` is exempt from the pause gate, so recovery is always possible.
+
+**Usage — anyone (no role needed):**
+- `verify-and-update-price-feeds (update (buff N)) (decoder <decoder-trait>)` on
+  `pyth-lazer-oracle-v1` — submit a Lazer update; verifies signature, writes prices, pays fee.
+  Relayers/dapps call this. Rejected while paused.
+- `read-price-with-staleness-check (feed-id uint)` / `get-price (feed-id uint)` — consumers read prices.
 
 **Off-chain (not a contract call):**
 - Fetch the signed update from the Lazer API / `@pythnetwork/pyth-lazer-sdk` in the **`evm`**
   format (feeds + properties + channel of your choice); that blob feeds
   `verify-and-update-price-feeds`.
 
-> **Admin's job in one line:** deploy → `set-trusted-signer` (required) → optionally
-> `set-fee`/`set-stale-price-threshold` → re-`set-trusted-signer` whenever Pyth rotates keys.
-> Everything else is consumer-driven.
+> **Governance's job in one line:** deploy → `set-trusted-signers` (required) → optionally
+> `set-fee`/`set-stale-price-threshold` → re-`set-trusted-signers` whenever Pyth rotates keys.
+> Everything else is consumer-driven (and a pause-role holder can halt it all in an emergency).
 
 ---
 
@@ -414,8 +480,8 @@ Each phase is independently reviewable/mergeable.
   `recover-signer` (envelope parse → `keccak256` → `secp256k1-recover?` → `{signer, payload}`,
   with magic / length / overlay guards) and `verify-update` (+ trusted-signer membership +
   expiry, reading the list from governance). Also stood up the **governance trusted-signer
-  slice** (`get-trusted-signers` / admin-gated `set-trusted-signers` / `set-admin`; admin
-  defaults to deployer) so the decoder stays pure (per §6.4). Tested with a synthetic
+  slice** (`get-trusted-signers` / `set-trusted-signers`, with a single admin principal —
+  later generalized to role-gated, §6a) so the decoder stays pure (per §6.4). Tested with a synthetic
   `evm` fixture (real secp256k1 sig over keccak256 via `@noble/curves`): valid recovery,
   bad magic, short input, oversized length, overlay bytes, untrusted/expired/tampered → reject.
   _TODO: add a **real** Lazer `evm` fixture (see Phase 2 note); the synthetic fixture already
@@ -437,12 +503,12 @@ Each phase is independently reviewable/mergeable.
   record, with the deferred properties reserved as `(optional …)` so the immutable `write`
   signature never has to change — #4 / §6.4); a strictly-monotonic per-feed publish-time guard
   (the replay defense, §6.4); batch `write` (≤16 feeds, partial-success/last-write-wins) gated
-  by an admin-settable `authorized-writer` via `contract-caller`; `get-price` (raw) and
+  by the `authorized-writer` via `contract-caller`; `get-price` (raw) and
   `read-price-with-staleness-check` (reads the threshold from governance, µs→s, additive form to
   avoid uint underflow — #3); and `print` events. Pulled the **stale-price-threshold** slice
-  into `pyth-lazer-governance` here (var + getter + admin setter, default 2 h mainnet / 5 y else)
-  because storage's staleness read depends on it. The `authorized-writer` setter is gated by
-  governance's admin (single-admin, #1). Tested: writer auth (unset/non-admin/wrong-caller),
+  into `pyth-lazer-governance` here (var + getter + governance-gated setter, default 2 h mainnet
+  / 5 y else) because storage's staleness read depends on it. The `authorized-writer` setter
+  delegates auth to governance (now the governance role, §6a). Tested: writer auth (unset/non-governance/wrong-caller),
   write+read, not-found, monotonic guard (older/equal skipped, newer accepted), per-entry batch
   partial success, and staleness fresh/stale/not-found.
 - **Phase 4 — oracle + governance. ✅ DONE.** `pyth-lazer-oracle-v1`:
@@ -451,20 +517,27 @@ Each phase is independently reviewable/mergeable.
   folds the decoded feeds into storage records (threading the update's publish-time + channel,
   and **enforcing** the required core fields the storage schema demands — the oracle is the
   optional→required boundary the storage FIXME flagged), writes to storage, then charges the
-  per-update fee (default `u0`, routed to the admin). Added `decoder-trait` to
+  per-update fee (default `u0`, routed to the fee-recipient). Added `decoder-trait` to
   `pyth-lazer-traits` (public method — Clarity trait methods can't be read-only, so the
   decoder's `decode-and-verify-price-feeds` flipped from read-only to public + `impl-trait`).
-  Governance gained the blessed `decoder` (optional, admin-set) and `fee` (default `u0`)
+  Governance gained the blessed `decoder` (governance-set) and `fee` (default `u0`)
   slices. No execution-plan; storage stays the read anchor (oracle exposes no reads). Tested:
   happy path (single + multi feed), unblessed/wrong decoder, propagated untrusted-signer
   failure, unauthorized-writer, missing-core-field enforcement, and fee charged / not-charged.
-  Bootstrap is a single required admin call (`set-trusted-signers`): the blessed decoder and
+  Bootstrap is a single required governance call (`set-trusted-signers`): the blessed decoder and
   storage's authorized-writer **default to the v1 contracts** (a principal literal is an address
   value, not a deploy-order edge — verified), so `set-decoder` / `set-authorized-writer` are
   upgrade-time re-pointing calls, not bootstrap. _(Deferred: per-signer add/remove ergonomic over
   `set-trusted-signers`.)_
 - **Phase 5 — hardening.** Overlay/trailing-byte checks, malformed-input tests,
   fuzz the parser against the Rust/JS SDK output, audit prep.
+  - ✅ **Role-based access + pause** (supersedes decision #1, §6a). Replaced the single
+    `contract-admin` with a `{who, role} → bool` grant map (governance + pause roles, mirroring
+    `stx-labs/usdcx-token`); added a pause switch (gating the oracle update path and every
+    governance config change) and a settable `fee-recipient` (no single admin to route fees to).
+    All gates check `contract-caller`. Tested: deploy-time grants, grant/revoke isolation, role
+    handoff, role separation, and pause enforcement at all three entry points (governance, oracle,
+    storage).
   - ✅ **Cost/gas review** ([`docs/cost-review.md`](./docs/cost-review.md), measured 2026-06-18,
     reproduce with `scripts/measure-costs.mjs`): a max 16-feed update submitted end-to-end is
     ~0.77% of block runtime (the binding dimension), ~129 such updates/block; all other dimensions
