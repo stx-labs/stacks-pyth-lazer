@@ -1,0 +1,45 @@
+id: 0
+name: Testnet deployment
+network: testnet
+stacks-node: https://api.testnet.hiro.so
+bitcoin-node: http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332
+plan:
+  batches:
+  - id: 0
+    transactions:
+    - transaction-type: contract-publish
+      contract-name: pyth-lazer-traits
+      expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
+      cost: 13640
+      path: contracts/pyth-lazer-traits.clar
+      anchor-block-only: true
+      clarity-version: 5
+    - transaction-type: contract-publish
+      contract-name: pyth-lazer-governance
+      expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
+      cost: 91810
+      path: contracts/pyth-lazer-governance.clar
+      anchor-block-only: true
+      clarity-version: 5
+    - transaction-type: contract-publish
+      contract-name: pyth-lazer-decoder-v1
+      expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
+      cost: 156670
+      path: contracts/pyth-lazer-decoder-v1.clar
+      anchor-block-only: true
+      clarity-version: 5
+    - transaction-type: contract-publish
+      contract-name: pyth-lazer-storage
+      expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
+      cost: 67490
+      path: contracts/pyth-lazer-storage.clar
+      anchor-block-only: true
+      clarity-version: 5
+    - transaction-type: contract-publish
+      contract-name: pyth-lazer-oracle-v1
+      expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
+      cost: 55860
+      path: contracts/pyth-lazer-oracle-v1.clar
+      anchor-block-only: true
+      clarity-version: 5
+    epoch: '3.4'
