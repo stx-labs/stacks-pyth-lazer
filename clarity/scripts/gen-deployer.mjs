@@ -10,7 +10,7 @@
 // The deployer ADDRESS is not derived here; run
 //   clarinet deployments generate --testnet
 // afterward and read `expected-sender` from the generated plan (authoritative).
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, chmodSync } from "node:fs";
 import { generateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 
@@ -35,14 +35,18 @@ if (updatedToml === toml) {
   console.error(`Could not find a 'mnemonic = "..."' line in ${TESTNET_TOML}; aborting.`);
   process.exit(1);
 }
-writeFileSync(TESTNET_TOML, updatedToml);
+// 0o600: the mnemonic is a seed phrase, so keep these files owner-readable only.
+// writeFileSync's mode applies on creation; chmod enforces it on a pre-existing file.
+writeFileSync(TESTNET_TOML, updatedToml, { mode: 0o600 });
+chmodSync(TESTNET_TOML, 0o600);
 
 // .env: replace or append DEPLOYER_MNEMONIC, leaving every other key (e.g. PYTH_API_KEY) intact.
 let env = existsSync(ENV) ? readFileSync(ENV, "utf8") : "";
 env = env.replace(/^DEPLOYER_MNEMONIC=.*$\n?/m, "");
 if (env.length && !env.endsWith("\n")) env += "\n";
 env += `DEPLOYER_MNEMONIC="${mnemonic}"\n`;
-writeFileSync(ENV, env);
+writeFileSync(ENV, env, { mode: 0o600 });
+chmodSync(ENV, 0o600);
 
 console.log("Generated a fresh 24-word deployer mnemonic (value not printed).");
 console.log(`  -> ${TESTNET_TOML} (mnemonic, clarinet reads this)`);
