@@ -1,16 +1,13 @@
 ;; Title: pyth-lazer-traits
-;; Version: v1
+;; Version: FINAL (immutable)
 ;;
-;; IMMUTABLE trait definitions (PLAN 5). Defines `decoder-trait`, the interface of
-;; the one swappable contract: the oracle takes the decoder as a `<decoder-trait>`
-;; param and dispatches `decode-and-verify-price-feeds` (public, since Clarity trait
-;; methods can't be read-only) after checking it against governance's blessed decoder.
-;; No storage/proxy trait -- the oracle hardcodes storage and consumers read it directly.
+;; Description: Interface of the swappable price-feed decoder
 ;;
+;; The oracle takes the decoder as a <decoder-trait> param and dispatches
+;; decode-and-verify-price-feeds after checking it against governance's blessed decoder.
 ;; The per-feed shape mirrors pyth-lazer-storage's record: price/exponent/publisher-count
-;; required, the rest `(optional)`. The decoder drops any feed missing the required trio,
-;; so every feed it returns is storable as-is. Matches AggregatedPriceFeedData (feed ids
-;; `uint`, timestamp microseconds).
+;; required (the decoder drops feeds missing them), the rest optional. Matches
+;; AggregatedPriceFeedData (feed ids uint, timestamp microseconds).
 (define-trait decoder-trait
 	(
 		(decode-and-verify-price-feeds ((buff 8192)) (response {
