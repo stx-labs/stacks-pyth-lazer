@@ -143,8 +143,49 @@
 				(ok {
 					timestamp: timestamp,
 					channel: channel,
-					price-feeds: (get feeds state)
+					price-feeds: (fold collect-storable-feed (get feeds state) (list))
 				})))))
+
+;; Reshape a parsed feed to the trait/storage shape, or drop it (`none`) when a
+;; required field (price/exponent/publisher-count) is absent.
+(define-private (to-storable-feed
+		(feed { feed-id: uint, price: (optional int), exponent: (optional int),
+			confidence: (optional uint), publisher-count: (optional uint),
+			best-bid: (optional int), best-ask: (optional int), ema-price: (optional int),
+			ema-confidence: (optional uint), feed-update-timestamp: (optional uint) }))
+	(match (get price feed) price
+		(match (get exponent feed) exponent
+			(match (get publisher-count feed) publisher-count
+				(some {
+					feed-id: (get feed-id feed),
+					price: price,
+					exponent: exponent,
+					publisher-count: publisher-count,
+					confidence: (get confidence feed),
+					best-bid: (get best-bid feed),
+					best-ask: (get best-ask feed),
+					ema-price: (get ema-price feed),
+					ema-confidence: (get ema-confidence feed),
+					feed-update-timestamp: (get feed-update-timestamp feed),
+				})
+				none)
+			none)
+		none))
+
+;; Fold step: keep the storable feeds, drop the rest.
+(define-private (collect-storable-feed
+		(feed { feed-id: uint, price: (optional int), exponent: (optional int),
+			confidence: (optional uint), publisher-count: (optional uint),
+			best-bid: (optional int), best-ask: (optional int), ema-price: (optional int),
+			ema-confidence: (optional uint), feed-update-timestamp: (optional uint) })
+		(acc (list 16 { feed-id: uint, price: int, exponent: int, publisher-count: uint,
+			confidence: (optional uint), best-bid: (optional int), best-ask: (optional int),
+			ema-price: (optional int), ema-confidence: (optional uint),
+			feed-update-timestamp: (optional uint) })))
+	(match (to-storable-feed feed)
+		;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant.
+		storable (unwrap-panic (as-max-len? (append acc storable) u16))
+		acc))
 
 ;; One outer-fold step. The accumulator is `(response state uint)`: pass through
 ;; once errored (`e (err e)`) or once all declared feeds are parsed (remaining 0);

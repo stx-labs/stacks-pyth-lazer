@@ -33,23 +33,24 @@ const ERR_UNTRUSTED_SIGNER = 2105;
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
-// Expected decoded per-feed tuple (full v1 shape). ema-* and feed-update-timestamp
-// are never produced by the v1 decoder, so they are always `none`.
+// Expected decoded per-feed tuple (full v1 shape). price/exponent/publisher-count are
+// required (the decoder drops feeds missing them); ema-* and feed-update-timestamp are
+// never produced by the v1 decoder, so they are always `none`.
 const feedRecord = (
   id: number,
   price: bigint,
   expo: bigint,
   conf: bigint | null,
-  pub: bigint | null,
+  pub: bigint,
   bid: bigint | null,
   ask: bigint | null,
 ) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
-    price: Cl.some(Cl.int(price)),
-    exponent: Cl.some(Cl.int(expo)),
+    price: Cl.int(price),
+    exponent: Cl.int(expo),
     confidence: optUint(conf),
-    "publisher-count": optUint(pub),
+    "publisher-count": Cl.uint(pub),
     "best-bid": optInt(bid),
     "best-ask": optInt(ask),
     "ema-price": Cl.none(),

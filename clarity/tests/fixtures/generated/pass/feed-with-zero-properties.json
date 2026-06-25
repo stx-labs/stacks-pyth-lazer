@@ -1,5 +1,5 @@
 {
-  "description": "first feed declares zero properties (propCount 0, all fields none); a normal feed follows it, verifying the empty feed advances exactly past its 5-byte header so the next feed still parses",
+  "description": "first feed declares zero properties (propCount 0) and is dropped (no required fields); a normal feed follows it, verifying the empty feed advances exactly past its 5-byte header so the next feed still parses",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [

@@ -87,13 +87,16 @@ const big = (v: string | number | null | undefined) => (v === null || v === unde
 
 // === captured: real evm bytes must decode to Pyth's own parsed values ===
 
+// The decoder only emits feeds carrying all required fields; feeds missing one are dropped.
+const hasRequired = (f: any) => f.price != null && f.exponent != null && f.publisherCount != null;
+
 const capturedFeed = (f: any) =>
   Cl.tuple({
     "feed-id": Cl.uint(f.priceFeedId),
-    price: optInt(big(f.price)),
-    exponent: optInt(big(f.exponent)),
+    price: Cl.int(BigInt(f.price)),
+    exponent: Cl.int(BigInt(f.exponent)),
     confidence: optUint(big(f.confidence)),
-    "publisher-count": optUint(big(f.publisherCount)),
+    "publisher-count": Cl.uint(BigInt(f.publisherCount)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
     "ema-price": Cl.none(),
@@ -105,7 +108,7 @@ const capturedDecode = (c: any) =>
   Cl.tuple({
     timestamp: Cl.uint(BigInt(c.parsed.timestampUs)),
     channel: Cl.uint(c.channel),
-    "price-feeds": Cl.list(c.parsed.priceFeeds.map(capturedFeed)),
+    "price-feeds": Cl.list(c.parsed.priceFeeds.filter(hasRequired).map(capturedFeed)),
   });
 
 // The stored record = decoder output + oracle-supplied publish-time/channel.
@@ -192,35 +195,40 @@ const PROP_OUT: Record<string, { field: string; kind: "int" | "uint" }> = {
   BestAskPrice: { field: "best-ask", kind: "int" },
 };
 
+// Build the expected decoded feed, or null if the decoder would drop it (a required
+// field -- price/exponent/publisher-count -- absent). A 0 in an optional field, and a 0
+// price/publisher-count, is Lazer's "missing" sentinel and decodes to none; exponent is
+// always literal (a 0 exponent is a real value).
 function expectedFeedFromSpec(f: any) {
-  const t: Record<string, any> = {
-    "feed-id": Cl.uint(f.id),
-    price: Cl.none(),
-    exponent: Cl.none(),
-    confidence: Cl.none(),
-    "publisher-count": Cl.none(),
-    "best-bid": Cl.none(),
-    "best-ask": Cl.none(),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
-    "feed-update-timestamp": Cl.none(),
-  };
+  const present = new Map<string, bigint>();
   for (const [name, v] of f.props) {
     const o = PROP_OUT[name as string];
     if (!o) continue;
-    // Mirror the decoder: a 0 in an optional field is Lazer's "missing" sentinel and
-    // decodes to none; exponent is always literal (a 0 exponent is a real value).
-    if (name !== "Exponent" && BigInt(v) === 0n) continue;
-    t[o.field] = o.kind === "int" ? Cl.some(Cl.int(BigInt(v))) : Cl.some(Cl.uint(BigInt(v)));
+    if (name !== "Exponent" && BigInt(v) === 0n) continue; // sentinel -> none
+    present.set(o.field, BigInt(v));
   }
-  return Cl.tuple(t);
+  // A feed missing any required field is dropped by the decoder.
+  if (!present.has("price") || !present.has("exponent") || !present.has("publisher-count")) return null;
+  const optI = (field: string) => (present.has(field) ? Cl.some(Cl.int(present.get(field)!)) : Cl.none());
+  return Cl.tuple({
+    "feed-id": Cl.uint(f.id),
+    price: Cl.int(present.get("price")!),
+    exponent: Cl.int(present.get("exponent")!),
+    "publisher-count": Cl.uint(present.get("publisher-count")!),
+    confidence: present.has("confidence") ? Cl.some(Cl.uint(present.get("confidence")!)) : Cl.none(),
+    "best-bid": optI("best-bid"),
+    "best-ask": optI("best-ask"),
+    "ema-price": Cl.none(),
+    "ema-confidence": Cl.none(),
+    "feed-update-timestamp": Cl.none(),
+  });
 }
 
 const expectedDecodeFromSpec = (spec: any) =>
   Cl.tuple({
     timestamp: Cl.uint(BigInt(spec.timestampUs)),
     channel: Cl.uint(spec.channel),
-    "price-feeds": Cl.list(spec.feeds.map(expectedFeedFromSpec)),
+    "price-feeds": Cl.list(spec.feeds.map(expectedFeedFromSpec).filter((x: any) => x !== null)),
   });
 
 describe("fixtures: captured real Lazer updates", () => {
@@ -242,11 +250,10 @@ describe("fixtures: captured real Lazer updates", () => {
 
     // Model the per-feed monotonic guard to predict each submit's write count and
     // the final winner per feed -- works for any set (mixed feeds, gaps, dups).
-    // The oracle stores a feed only if it has all required fields (price, exponent,
-    // publisher-count); feeds missing one are skipped, so they neither count as a
-    // write nor land in storage. Mirror that here (the screened fixtures include
-    // feeds without confidence / best-bid / best-ask).
-    const hasRequired = (f: any) => f.price != null && f.exponent != null && f.publisherCount != null;
+    // The decoder drops a feed missing any required field (price, exponent,
+    // publisher-count), so it never reaches storage -- it neither counts as a write
+    // nor lands in storage. Mirror that here (the screened fixtures include feeds
+    // without confidence / best-bid / best-ask).
     const winner = new Map<number, { f: any; c: any }>();
     for (const c of seq) {
       let writes = 0;

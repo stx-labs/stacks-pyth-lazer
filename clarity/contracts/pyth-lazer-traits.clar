@@ -7,11 +7,10 @@
 ;; methods can't be read-only) after checking it against governance's blessed decoder.
 ;; No storage/proxy trait -- the oracle hardcodes storage and consumers read it directly.
 ;;
-;; The per-feed shape carries every property the protocol can supply, each `(optional)`:
-;; the decoder fills what a payload contains, the oracle decides which are REQUIRED
-;; before storing. IMMUTABLE, so it mirrors the full storage vocabulary -- a future
-;; decoder can populate any field without a new trait. Matches AggregatedPriceFeedData
-;; (feed ids `uint`, timestamp microseconds).
+;; The per-feed shape mirrors pyth-lazer-storage's record: price/exponent/publisher-count
+;; required, the rest `(optional)`. The decoder drops any feed missing the required trio,
+;; so every feed it returns is storable as-is. Matches AggregatedPriceFeedData (feed ids
+;; `uint`, timestamp microseconds).
 (define-trait decoder-trait
 	(
 		(decode-and-verify-price-feeds ((buff 8192)) (response {
@@ -19,10 +18,10 @@
 			channel: uint,
 			price-feeds: (list 16 {
 				feed-id: uint,
-				price: (optional int),
-				exponent: (optional int),
+				price: int,
+				exponent: int,
+				publisher-count: uint,
 				confidence: (optional uint),
-				publisher-count: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
 				ema-price: (optional int),

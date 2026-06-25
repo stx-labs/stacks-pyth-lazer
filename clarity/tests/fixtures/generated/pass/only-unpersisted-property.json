@@ -1,8 +1,0 @@
-{
-  "description": "a feed whose single property is one the v1 decoder does not persist (MarketSession); the feed decodes with every output field none -- it contributes a record but no values",
-  "channel": 1,
-  "timestampUs": "1700000000000000",
-  "feeds": [
-    { "id": 80, "props": [["MarketSession", "1"]] }
-  ]
-}
