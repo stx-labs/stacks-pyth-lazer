@@ -71,8 +71,13 @@ async function initApiService(config: ApiConfig) {
  * Initializes the application.
  */
 async function initApp() {
+  const priceMonitor = new PythSymbolMonitor({
+    channel: ENV.PYTH_LAZER_CHANNEL,
+    apiKey: ENV.PYTH_API_KEY,
+    numConnections: ENV.PYTH_CLIENT_NUM_CONNECTIONS,
+  });
   const config: ApiConfig = {
-    priceMonitor: new PythSymbolMonitor(),
+    priceMonitor,
   };
   await initBackgroundServices(config);
   await initApiService(config);

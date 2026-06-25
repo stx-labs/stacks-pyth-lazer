@@ -6,7 +6,6 @@ import {
   type ParsedPayload,
 } from '@pythnetwork/pyth-lazer-sdk';
 import { LRUCache } from 'lru-cache';
-import { ENV } from '../env.ts';
 
 /**
  * Maximum number of feeds we monitor at once. The on-chain
@@ -64,6 +63,8 @@ function parsePythLazerChannel(channel: string): Channel {
 export class PythSymbolMonitor {
   private pythClient?: PythLazerClient;
   private readonly channel: Channel;
+  private readonly apiKey: string;
+  private readonly numConnections: number;
   /** Whether the single subscription is currently active on the stream. */
   private subscribed = false;
   /** Most recent parsed payload (all feeds) seen on the subscription, if any. */
@@ -73,8 +74,10 @@ export class PythSymbolMonitor {
   /** Optional consumer of each update (e.g. the relaying heuristic). */
   private onPayload?: PythPricePayloadHandler;
 
-  constructor() {
-    this.channel = parsePythLazerChannel(ENV.PYTH_LAZER_CHANNEL);
+  constructor(opts: { channel: string, apiKey: string, numConnections: number }) {
+    this.channel = parsePythLazerChannel(opts.channel);
+    this.apiKey = opts.apiKey;
+    this.numConnections = opts.numConnections;
     this.symbolCache = new LRUCache<string, boolean>({
       max: MAX_PRICE_FEEDS,
       dispose: (_value, symbol) => {
@@ -101,9 +104,9 @@ export class PythSymbolMonitor {
     if (onPayload) this.onPayload = onPayload;
     logger.info(`${this.constructor.name} connecting to Pyth Lazer channel ${this.channel}`);
     this.pythClient = await PythLazerClient.create({
-      token: ENV.PYTH_API_KEY,
+      token: this.apiKey,
       webSocketPoolConfig: {
-        numConnections: ENV.PYTH_CLIENT_NUM_CONNECTIONS,
+        numConnections: this.numConnections,
         urls: [
           'wss://pyth-lazer-0.dourolabs.app/v1/stream',
           'wss://pyth-lazer-1.dourolabs.app/v1/stream',

@@ -157,10 +157,9 @@ export class PriceUpdateTransactionSubmitter {
   }
 
   /**
-   * Decide what nonce/fee the next submission should use: replace the pending tx
-   * if it is still unmined, otherwise submit fresh at the chain's confirmed nonce.
-   * @returns The target, or `null` if a replacement is needed but the fee ceiling
-   *   has been reached.
+   * Decide what nonce/fee the next submission should use: replace the pending tx if it is still
+   * unmined, otherwise submit fresh at the chain's confirmed nonce.
+   * @returns The target, or `null` if a replacement is needed but the fee ceiling has been reached.
    */
   private async resolveTarget(): Promise<{
     nonce: bigint;
@@ -169,16 +168,15 @@ export class PriceUpdateTransactionSubmitter {
   } | null> {
     const confirmedNonce = await this.fetchConfirmedNonce();
 
-    // Pending tx still unmined (the chain hasn't advanced past its nonce): replace
-    // it at the same nonce with a higher fee.
+    // Pending tx still unmined (the chain hasn't advanced past its nonce): replace it at the same
+    // nonce with a higher fee.
     if (this.pending && confirmedNonce <= this.pending.nonce) {
       const fee = this.bumpFee(this.pending.fee);
       if (fee === null) return null;
       return { nonce: this.pending.nonce, fee, replacing: true };
     }
-
-    // Otherwise the pending tx (if any) has mined: submit fresh at the confirmed
-    // nonce, letting the fee be fixed-or-estimated.
+    // Otherwise the pending tx (if any) has mined: submit fresh at the confirmed nonce, letting the
+    // fee be fixed-or-estimated.
     return {
       nonce: confirmedNonce,
       fee: this.txFeeMicroStx != null ? BigInt(this.txFeeMicroStx) : undefined,
@@ -199,11 +197,10 @@ export class PriceUpdateTransactionSubmitter {
   }
 
   /**
-   * Raise a fee by the configured percent for a replacement, clamped to the
-   * optional ceiling.
+   * Raise a fee by the configured percent for a replacement, clamped to the optional ceiling.
    * @param fee - The fee of the tx being replaced.
-   * @returns The (strictly higher) replacement fee, or `null` if it cannot exceed
-   *   the previous fee without breaching the ceiling.
+   * @returns The (strictly higher) replacement fee, or `null` if it cannot exceed the previous fee
+   *   without breaching the ceiling.
    */
   private bumpFee(fee: bigint): bigint | null {
     const raised = fee + (fee * this.feeBumpPercent) / 100n;
