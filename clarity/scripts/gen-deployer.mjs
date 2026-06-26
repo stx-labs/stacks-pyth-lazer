@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// One-shot: generate a fresh 24-word testnet deployer wallet. Writes the mnemonic
-// into settings/Testnet.toml (which clarinet reads to derive the deployer) and
-// mirrors it into .env. The mnemonic is never printed. Refuses to overwrite an
-// existing real mnemonic unless FORCE=1, so re-running can't silently orphan funds.
+// One-shot: generate a fresh 24-word testnet deployer wallet. Run from clarity/.
+// Writes the mnemonic into settings/Testnet.toml (seeding it from a template if
+// absent, since it is gitignored) for clarinet to read, and mirrors it into .env.
+// The mnemonic is never printed. Refuses to overwrite an existing real mnemonic
+// unless FORCE=1, so re-running can't silently orphan funds.
 //
 //   node scripts/gen-deployer.mjs          # first run
 //   FORCE=1 node scripts/gen-deployer.mjs  # rotate the wallet
@@ -10,7 +11,8 @@
 // The deployer ADDRESS is not derived here; run
 //   clarinet deployments generate --testnet
 // afterward and read `expected-sender` from the generated plan (authoritative).
-import { readFileSync, writeFileSync, existsSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { generateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 
@@ -19,7 +21,26 @@ const ENV = ".env";
 const PLACEHOLDER = "<YOUR PRIVATE TESTNET MNEMONIC HERE>";
 const force = process.env.FORCE === "1";
 
-const toml = readFileSync(TESTNET_TOML, "utf8");
+// Paths are cwd-relative (repo convention: scripts run from clarity/). Bail with a
+// clear message if we're elsewhere, instead of reading/writing the wrong files.
+if (!existsSync("Clarinet.toml")) {
+  console.error("Run this from the clarity/ directory (no Clarinet.toml in the current directory).");
+  process.exit(1);
+}
+
+// settings/Testnet.toml is gitignored, so it is absent on a fresh clone. Seed a
+// minimal template carrying the PLACEHOLDER, which flows straight into the fill
+// logic below -- so this script works standalone without running clarinet first.
+const TESTNET_TEMPLATE = `[network]
+name = "testnet"
+stacks_node_rpc_address = "https://api.testnet.hiro.so"
+deployment_fee_rate = 10
+
+[accounts.deployer]
+mnemonic = "${PLACEHOLDER}"
+`;
+
+const toml = existsSync(TESTNET_TOML) ? readFileSync(TESTNET_TOML, "utf8") : TESTNET_TEMPLATE;
 if (!toml.includes(PLACEHOLDER) && !force) {
   console.error(
     `Refusing to overwrite: ${TESTNET_TOML} already holds a real mnemonic. Set FORCE=1 to rotate the wallet.`,
@@ -37,6 +58,7 @@ if (updatedToml === toml) {
 }
 // 0o600: the mnemonic is a seed phrase, so keep these files owner-readable only.
 // writeFileSync's mode applies on creation; chmod enforces it on a pre-existing file.
+mkdirSync(dirname(TESTNET_TOML), { recursive: true });
 writeFileSync(TESTNET_TOML, updatedToml, { mode: 0o600 });
 chmodSync(TESTNET_TOML, 0o600);
 
