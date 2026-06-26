@@ -74,7 +74,7 @@ export class PythSymbolMonitor {
   /** Optional consumer of each update (e.g. the relaying heuristic). */
   private onPayload?: PythPricePayloadHandler;
 
-  constructor(opts: { channel: string, apiKey: string, numConnections: number }) {
+  constructor(opts: { channel: string; apiKey: string; numConnections: number }) {
     this.channel = parsePythLazerChannel(opts.channel);
     this.apiKey = opts.apiKey;
     this.numConnections = opts.numConnections;
@@ -179,18 +179,21 @@ export class PythSymbolMonitor {
       logger.info(`${this.constructor.name} no symbols to monitor; subscription cleared`);
       return;
     }
-
     this.pythClient.subscribe({
       type: 'subscribe',
       subscriptionId: SUBSCRIPTION_ID,
       symbols,
-      // Only the fields `pyth-lazer-oracle-v1` requires to store a feed
-      // (price + exponent + publisher-count); anything else just bloats the
-      // signed payload. A feed missing any of these is skipped on-chain.
-      properties: ['price', 'exponent', 'publisherCount'],
+      properties: [
+        'price',
+        'exponent',
+        'publisherCount',
+        'confidence',
+        'bestBidPrice',
+        'bestAskPrice',
+        'emaPrice',
+        'emaConfidence',
+      ],
       formats: ['evm'],
-      // Binary delivery yields the raw signed `evm` payload (for on-chain
-      // submission); `parsed` additionally includes human-readable prices.
       deliveryFormat: 'binary',
       parsed: true,
       channel: this.channel,
@@ -223,6 +226,6 @@ export class PythSymbolMonitor {
 
     // Hand the signed `evm` payload + parsed prices to the relaying heuristic.
     if (evm) this.onPayload?.(evm, parsed);
-    logger.debug(event.value, `${this.constructor.name} received price update`);
+    logger.trace(event.value, `${this.constructor.name} received price update`);
   };
 }

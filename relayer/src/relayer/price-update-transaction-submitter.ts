@@ -133,15 +133,17 @@ export class PriceUpdateTransactionSubmitter {
     fee: bigint,
     replacing: boolean
   ): SubmitResult {
+    const txId = `0x${result.txid}`;
+
     if (!('error' in result)) {
       this.pending = { nonce, fee };
       logger.info(
-        { txId: result.txid, nonce: Number(nonce), fee: Number(fee), replacing },
+        { txId, nonce: Number(nonce), fee: Number(fee), replacing },
         replacing
           ? `${this.constructor.name} replaced unmined update (RBF)`
           : `${this.constructor.name} broadcast price update`
       );
-      return { ok: true, txId: result.txid };
+      return { ok: true, txId };
     }
 
     // A nonce rejection means our assumption about the pending tx is wrong; drop
@@ -150,7 +152,7 @@ export class PriceUpdateTransactionSubmitter {
       this.pending = undefined;
     }
     logger.error(
-      { reason: result.reason, error: result.error, txId: result.txid },
+      { reason: result.reason, error: result.error, txId },
       `${this.constructor.name} broadcast rejected: ${result.reason}`
     );
     return { ok: false, error: `${result.reason}: ${result.error}` };
