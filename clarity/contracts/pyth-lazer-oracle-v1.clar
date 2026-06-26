@@ -24,37 +24,19 @@
 		(asserts! (is-eq (contract-of decoder) (contract-call? .pyth-lazer-governance get-decoder))
 			ERR_INVALID_DECODER)
 		(let ((decoded (try! (contract-call? decoder decode-and-verify-price-feeds update)))
-				(built (build-records decoded))
-				(written (try! (contract-call? .pyth-lazer-storage write (get records built)))))
+				;; Transform Pyth message format -> storage format
+				(records (get records (fold add-record (get price-feeds decoded) {
+					publish-time: (get timestamp decoded),
+					channel: (get channel decoded),
+					records: (list)
+				})))
+				(written (try! (contract-call? .pyth-lazer-storage write records))))
 			(try! (charge-fee))
 			(ok written))))
 
 ;;;; Private functions
 
-;; Transform parsed Pyth message into records we can write to storage contract
-(define-private (build-records
-		(decoded {
-			timestamp: uint,
-			channel: uint,
-			price-feeds: (list 16 {
-				feed-id: uint,
-				price: int,
-				exponent: int,
-				publisher-count: uint,
-				confidence: (optional uint),
-				best-bid: (optional int),
-				best-ask: (optional int),
-				ema-price: (optional int),
-				ema-confidence: (optional uint),
-				feed-update-timestamp: (optional uint)
-			})
-		}))
-	(fold add-record (get price-feeds decoded) {
-		publish-time: (get timestamp decoded),
-		channel: (get channel decoded),
-		records: (list)
-	}))
-
+;; Transform Pyth message format -> storage format
 ;; Extract `feed-id` from record, add `publish-time` and `channel`
 (define-private (add-record
 		(feed {
