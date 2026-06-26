@@ -6,22 +6,15 @@
 ;; validation (reads governance), and Lazer payload parse. The oracle receives
 ;; this as a trait param and validates it against governance's blessed decoder.
 ;;
-;; Phase 1 (DONE): signature verification (PLAN 3.2) + trusted-signer check.
-;; Phase 2 (DONE): Lazer payload/feed parser (PLAN 3.3-3.4) -> price records,
-;;   composed by `decode-and-verify-price-feeds`.
-;;   NOTE: byte order follows the EVM PythLazerLib (big-endian). Confirmed against
-;;   a REAL upstream fixture (pyth-crosschain PythLazer.t.sol v0.1.1) in
-;;   tests/pyth-lazer-golden-fixture.test.ts -- envelope + secp256k1 recovery +
-;;   payload layout all match. That vector is single-feed and carries no
-;;   confidence, so confidence(u64) width and multi-feed real data are still only
-;;   covered by the self-consistent synthetic tests (PLAN 9, 10).
+;; Phase 1: signature verification (PLAN 3.2) + trusted-signer check.
+;; Phase 2: Lazer payload/feed parser (PLAN 3.3-3.4), composed by
+;;   `decode-and-verify-price-feeds`. Byte order follows the EVM PythLazerLib
+;;   (big-endian), confirmed against real upstream + production `evm` fixtures
+;;   (golden tests + tests/fixtures/captured).
 ;;
-;; CLARITY6 (SIP-43): `ed25519-verify` would let this decoder also accept Lazer's
-;;   `solana` (ed25519) format; v1 is secp256k1/`evm`-only (PLAN 3.1, 4.1).
-;; CLARITY6 (SIP-43): `secp256k1-decompress?` would let us key trusted signers by
-;;   ETH address; v1 uses compressed-pubkey identity instead (PLAN 3.5, 4.1).
-;; CLARITY6 (SIP-43): variadic `concat` would flatten any multi-part buffer
-;;   assembly - minor here, the decoder is slice/parse-dominant (PLAN 4.1).
+;; CLARITY6 (SIP-43): `ed25519-verify` would add Lazer's `solana` (ed25519) format;
+;;   `secp256k1-decompress?` would let signers be keyed by ETH address. v1 is
+;;   secp256k1/`evm`-only, keyed by compressed pubkey (PLAN 3.1, 3.5, 4.1).
 
 ;; Implements the swappable decoder interface the oracle dispatches (PLAN 6.4).
 (impl-trait .pyth-lazer-traits.decoder-trait)

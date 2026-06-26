@@ -9,18 +9,15 @@
 
 ;;;; Constants
 
-;; Caller of `write` is not the authorized writer, or a setter caller is not the
-;; governance admin.
+;; Caller of `write` is not the authorized writer. (set-authorized-writer delegates its
+;; auth to governance, so it surfaces governance's ERR_UNAUTHORIZED u4003 instead.)
 (define-constant ERR_UNAUTHORIZED (err u3001))
-;; (u3002 retired: writer now has a default, so "no writer configured" is unreachable.)
 ;; No record stored for this feed-id.
 (define-constant ERR_PRICE_FEED_NOT_FOUND (err u3003))
 ;; Stored price is older than the governance staleness window.
 (define-constant ERR_STALE_PRICE (err u3004))
 ;; Could not read wall-clock time from the chain.
 (define-constant ERR_NO_BLOCK_TIME (err u3005))
-;; (u3006 retired: a not-newer entry is now skipped silently -- counted as 0
-;; writes, never surfaced as an error -- so the monotonic guard needs no code.)
 
 ;; Lazer publish-time is microseconds; staleness compares in seconds (decision #3).
 (define-constant MICROS_PER_SECOND u1000000)
@@ -33,20 +30,16 @@
 ;; into storage). Re-point to a redeployed oracle via `set-authorized-writer` (PLAN 6.4, 7).
 (define-data-var authorized-writer principal .pyth-lazer-oracle-v1)
 
-;; feed-id (uint, decision #2) -> price record. The optional/required split is
-;; finalized (Phase 5) against `pyth-lazer-protocol`'s AggregatedPriceFeedData and
-;; confirmed on live BTC/ETH/SOL `evm` updates (tests/fixtures/lazer + golden tests):
-;;   - REQUIRED: `exponent` and `publisher-count` are non-optional in the protocol
-;;     struct (always present). `price` is protocol-optional, but we require it here
-;;     -- a record with no price is useless -- so the ORACLE skips a price-less feed
-;;     (partial success) rather than rejecting the batch. `publish-time` / `channel`
-;;     are supplied by the oracle (decision #3 / 6.3): `publish-time` is the update
-;;     timestamp (microseconds), `channel` is recorded, not enforced.
-;;   - OPTIONAL (protocol `Option<...>`): `confidence`, `best-bid`, `best-ask`,
-;;     `ema-price`, `ema-confidence`, `feed-update-timestamp`. The v1 decoder fills
-;;     confidence / best-bid / best-ask; ema-* and feed-update-timestamp are reserved
-;;     `none` (not in the v1 subscription) so a later decoder can populate them
-;;     without reshaping this IMMUTABLE schema (decision #4 / PLAN 6.4).
+;; feed-id (uint, decision #2) -> price record. Optional/required split mirrors
+;; `pyth-lazer-protocol`'s AggregatedPriceFeedData (verified on live evm updates):
+;;   - REQUIRED `price` / `exponent` / `publisher-count`. Only `price` is protocol-
+;;     optional; the ORACLE skips a price-less feed (partial success) rather than
+;;     rejecting the batch. `publish-time` (update timestamp, microseconds) and
+;;     `channel` are supplied by the oracle; channel is recorded, not enforced.
+;;   - OPTIONAL `confidence` / `best-bid` / `best-ask` / `ema-*` /
+;;     `feed-update-timestamp`. The v1 decoder fills the first three; the rest are
+;;     reserved `none` so a later decoder can populate them without reshaping this
+;;     IMMUTABLE schema.
 (define-map prices uint {
 	price: int,
 	exponent: int,
@@ -148,13 +141,17 @@
 		existing (> publish-time (get publish-time existing))
 		true))
 
-;;;; Admin (governance admin only -- single admin principal, decision #1)
+;;;; Admin (governance role, via the governance contract)
 
-;; Re-point storage at a redeployed oracle. Gated by governance's admin so the
-;; whole system shares one admin (decision #1).
+;; Re-point storage at a redeployed oracle. Auth is delegated to governance: the caller
+;; must hold the governance role and the protocol must be active. We pass our own
+;; `contract-caller` (the direct caller) to governance's check, so the role-holder must
+;; call storage directly -- avoids the tx.origin phishing vector and lets a contract
+;; (multisig/DAO) hold the role.
 (define-public (set-authorized-writer (new-writer principal))
 	(begin
-		(asserts! (is-eq tx-sender (contract-call? .pyth-lazer-governance get-admin)) ERR_UNAUTHORIZED)
+		(try! (contract-call? .pyth-lazer-governance assert-active))
+		(try! (contract-call? .pyth-lazer-governance assert-governance contract-caller))
 		(var-set authorized-writer new-writer)
-		(print { type: "authorized-writer", action: "updated", data: new-writer })
+		(print { type: "authorized-writer", action: "updated", data: { new-writer: new-writer } })
 		(ok true)))
