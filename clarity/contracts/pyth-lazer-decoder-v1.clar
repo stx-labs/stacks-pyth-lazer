@@ -54,14 +54,14 @@
 (define-constant FEED_SLOTS (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15))
 (define-constant PROPERTY_SLOTS (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12))
 
-;; Errors: Envelope / signature (Phase 1)
+;; Errors: EVM envelope / signature (Phase 1)
 (define-constant ERR_INPUT_TOO_SHORT (err u2101))
 (define-constant ERR_INVALID_EVM_MAGIC (err u2102))
 (define-constant ERR_OVERLAY_PRESENT (err u2103))
 (define-constant ERR_INVALID_SIGNATURE (err u2104))
 (define-constant ERR_UNTRUSTED_SIGNER (err u2105))
 
-;; Errors: Payload / feeds (Phase 2)
+;; Errors: Lazer payload / feeds (Phase 2)
 (define-constant ERR_INVALID_PAYLOAD_MAGIC (err u2201))
 (define-constant ERR_TOO_MANY_FEEDS (err u2202))
 (define-constant ERR_INVALID_FEED_DATA (err u2203)) ;; Truncated / short read while parsing a feed
@@ -127,12 +127,16 @@
 					price-feeds: (get feeds state)
 				})))))
 
-;; Outer-fold step: stop once errored or all declared feeds are parsed (remaining 0),
-;; else parse the next feed at the cursor and append it (dropped if missing a required field).
+;; Fold step: Parse one feed slot and append to `acc`
+;; Feed not appended to `acc` if required field(s) missing
+;; On error, `acc` set to `(err ...)` and remaining feeds skipped
 (define-private (parse-feed-slot
 		(slot_ uint)
 		(acc (response {
-			bytes: (buff 8192), offset: uint, remaining: uint, feeds: (list 16 {
+			bytes: (buff 8192),
+			offset: uint,
+			remaining: uint,
+			feeds: (list 16 {
 				feed-id: uint,
 				price: int,
 				exponent: int,
@@ -153,8 +157,7 @@
 					(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state))))
 							(feed (get feed parsed))
 							(feeds (get feeds state))
-							;; Keep the feed only if it carries all required fields, collapsing those
-							;; three from optional to bare. Not a `filter`: the element type changes.
+							;; Keep the feed only if it has all required fields
 							(next-feeds (match (get price feed) price
 								(match (get exponent feed) exponent
 									(match (get publisher-count feed) publisher-count
@@ -175,34 +178,56 @@
 						})))))
 		e (err e)))
 
-;; Parse one feed (feed-id, num-properties, then its properties); returns the feed plus
-;; the offset just past it.
+;; Parse one feed
+;; Returns the feed plus the offset just past it
 (define-private (parse-one-feed (bytes (buff 8192)) (offset uint))
 	(let ((feed-id (unwrap! (read-uint-be? bytes offset u4) ERR_INVALID_FEED_DATA))
 			(num-props (unwrap! (read-uint-be? bytes (+ offset u4) u1) ERR_INVALID_FEED_DATA))
 			(parsed (try! (fold parse-property PROPERTY_SLOTS
-				(ok { bytes: bytes, offset: (+ offset u5), remaining: num-props,
-					price: none, exponent: none, confidence: none,
-					publisher-count: none, best-bid: none, best-ask: none })))))
+				(ok {
+					bytes: bytes,
+					offset: (+ offset u5),
+					remaining: num-props,
+					price: none,
+					exponent: none,
+					confidence: none,
+					publisher-count: none,
+					best-bid: none, best-ask:
+					none
+				})))))
 		;; Every declared property must have been consumed
 		(asserts! (is-eq (get remaining parsed) u0) ERR_TOO_MANY_PROPS)
 		(ok {
-			feed: { feed-id: feed-id, price: (get price parsed),
-				exponent: (get exponent parsed), confidence: (get confidence parsed),
-				publisher-count: (get publisher-count parsed), best-bid: (get best-bid parsed),
+			feed: {
+				feed-id: feed-id,
+				price: (get price parsed),
+				exponent: (get exponent parsed),
+				confidence: (get confidence parsed),
+				publisher-count: (get publisher-count parsed),
+				best-bid: (get best-bid parsed),
 				best-ask: (get best-ask parsed),
 				;; Reserved fields the v1 subscription does not carry
-				ema-price: none, ema-confidence: none, feed-update-timestamp: none },
+				ema-price: none,
+				ema-confidence: none,
+				feed-update-timestamp: none
+			},
 			offset: (get offset parsed)
 		})))
 
-;; Inner-fold step: read the next property's type, persist it if relevant, and advance
-;; the cursor by 1 (type byte) + the value width.
+;; Inner fold step: Read the next property's type, save it if recognized, and advance cursor
 (define-private (parse-property
 		(slot_ uint)
-		(acc (response { bytes: (buff 8192), offset: uint, remaining: uint,
-			price: (optional int), exponent: (optional int), confidence: (optional uint),
-			publisher-count: (optional uint), best-bid: (optional int), best-ask: (optional int) } uint)))
+		(acc (response {
+			bytes: (buff 8192),
+			offset: uint,
+			remaining: uint,
+			price: (optional int),
+			exponent: (optional int),
+			confidence: (optional uint),
+			publisher-count: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int)
+		} uint)))
 	(match acc
 		state
 			;; bytes/off are bound only in the active branch, so no-op tail iterations stay cheap
@@ -216,22 +241,34 @@
 						(let ((advanced (try! (set-property-field ptype bytes (+ off u1) state))))
 							(ok (merge advanced {
 								offset: (+ off u1 (property-width ptype)),
-								remaining: (- remaining u1) }))))))
+								remaining: (- remaining u1)
+							}))))))
 		e (err e)))
 
-;; Lazer's evm encoding has no Option type: a missing optional is encoded as 0, so the
+;; Lazer's evm encoding has no Option type: A missing optional is encoded as 0, so the
 ;; reference PythLazerLib treats a parsed 0 (price/bid/ask/confidence/publisher-count) as
 ;; missing. We mirror that -- collapse 0 to none. Exponent 0 is a real value, kept literally.
 (define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
 (define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
 
-;; Extract a persisted property's value into the state (pass through for the rest);
-;; errors on a short read. 0 collapses to none per some-if-nonzero-* above.
+;; Extract a property's value into the state
+;; Errors on a short read
+;; Maps `0` -> `none` as described above
 (define-private (set-property-field
-		(ptype uint) (bytes (buff 8192)) (voffset uint)
-		(state { bytes: (buff 8192), offset: uint, remaining: uint,
-			price: (optional int), exponent: (optional int), confidence: (optional uint),
-			publisher-count: (optional uint), best-bid: (optional int), best-ask: (optional int) }))
+		(ptype uint)
+		(bytes (buff 8192))
+		(voffset uint)
+		(state {
+			bytes: (buff 8192),
+			offset: uint,
+			remaining: uint,
+			price: (optional int),
+			exponent: (optional int),
+			confidence: (optional uint),
+			publisher-count: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int)
+		}))
 	(if (is-eq ptype PROP_PRICE)
 		(ok (merge state { price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
 		(if (is-eq ptype PROP_BEST_BID)
@@ -246,8 +283,10 @@
 							(ok (merge state { confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
 							(ok state))))))))
 
-;; Value width (bytes) per property type: PublisherCount(u16)/Exponent(i16) -> 2,
-;; MarketSession(u8) -> 1, everything else (i64/u64) -> 8.
+;; Value width (bytes) per property type:
+;;   - PublisherCount(u16)/Exponent(i16) -> 2
+;;   - MarketSession(u8) -> 1
+;;   - Everything else (i64/u64) -> 8
 (define-private (property-width (ptype uint))
 	(if (or (is-eq ptype u3) (is-eq ptype u4)) u2
 		(if (is-eq ptype u9) u1 u8)))
@@ -259,27 +298,39 @@
 	(let ((now (default-to u0 (get-stacks-block-info? time (- stacks-block-height u1)))))
 		(get trusted (fold check-trusted-signer
 			(contract-call? .pyth-lazer-governance get-trusted-signers)
-			{ target: signer, now: now, trusted: false }))))
+			{
+				target: signer,
+				now: now,
+				trusted: false
+			}))))
 
 (define-private (check-trusted-signer
-		(entry { pubkey: (buff 33), expires-at: uint })
-		(acc { target: (buff 33), now: uint, trusted: bool }))
+		(entry {
+			pubkey: (buff 33),
+			expires-at: uint
+		})
+		(acc {
+			target: (buff 33),
+			now: uint,
+			trusted: bool
+		}))
 	(if (and (is-eq (get pubkey entry) (get target acc))
 			(< (get now acc) (get expires-at entry)))
 		(merge acc { trusted: true })
 		acc))
 
-;;;; Byte readers (big-endian; sizes <= 16). Optional-returning so callers unwrap! with a
-;;;; contextual error.
+;;;; Helper functions: Buffer reading
 
+;; #[allow(case_fn)]
 (define-private (read-uint-be? (bytes (buff 8192)) (pos uint) (size uint))
 	(match (slice? bytes pos (+ pos size))
 		b (some (buff-to-uint-be (unwrap-panic (as-max-len? b u16))))
 		none))
 
-;; Sign-extend an N-byte two's-complement value: shift the sign bit to bit 127 and back.
+;; #[allow(case_fn)]
 (define-private (read-int-be? (bytes (buff 8192)) (pos uint) (size uint))
 	(match (slice? bytes pos (+ pos size))
 		b (let ((shift (* (- u16 size) u8)))
+			;; Sign-extend an N-byte two's-complement value: shift the sign bit to bit 127 and back.
 			(some (bit-shift-right (bit-shift-left (buff-to-int-be (unwrap-panic (as-max-len? b u16))) shift) shift)))
 		none))
