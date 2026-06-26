@@ -1,15 +1,15 @@
 # Cost review — Pyth Lazer oracle
 
-Execution-cost analysis of the on-chain hot paths, measured **2026-06-18** against the
-current `decoder-v1` (applies the `0 → none` optional collapse, persists
-price/exponent/confidence/publisher-count/best-bid/best-ask, and reads each
-threaded-tuple field at most once per fold iteration).
+Execution-cost analysis of the on-chain hot paths, measured **2026-06-26** against the
+current `decoder-v1` (single-pass feed parser that applies the `0 → none` optional
+collapse, persists price/exponent/confidence/publisher-count/best-bid/best-ask, and reads
+each threaded-tuple field at most once per fold iteration).
 
 **TL;DR:** the worst-case relayer transaction — a full 16-feed update submitted
-end-to-end through the oracle — costs **~38.7M runtime, ≈0.77% of a Stacks block**.
-Runtime is the only binding dimension; reads/writes are all well under 0.4%. Roughly
-**129 max-size updates fit in one block's runtime budget**, far above any realistic
-relay rate. No optimization is required.
+end-to-end through the oracle — costs **~39.0M runtime, ≈0.78% of a Stacks block**.
+Runtime is the only binding dimension; every other dimension stays at or below ~0.40%.
+Roughly **128 max-size updates fit in one block's runtime budget** (~2,000 feeds/block),
+far above any realistic relay rate. No optimization is required.
 
 ## How to reproduce
 
@@ -20,11 +20,12 @@ node scripts/measure-costs.mjs
 The script (`scripts/measure-costs.mjs`) spins up simnet with `trackCosts`, trusts
 Pyth's production signer, and measures two **real PROD-signed** captured fixtures — a
 3-feed crypto update (`channel 1`) and a 16-feed equity update (`channel 3`) — at the
-two public entry points. Two feed counts give a linear (fixed + per-feed) model.
+decoder's read-only verify+parse path and the oracle's public end-to-end entry point.
+Two feed counts give a linear (fixed + per-feed) model.
 
-> The read-only paths (`recover-signer`, `decode-payload`) are not listed separately:
-> the SDK only meters transactions, so their cost is captured inside the public
-> functions below. The `decode-and-verify` fixed term is the signature+header overhead.
+> `recover-signer` and `decode-lazer-payload` are not listed separately: they run inside
+> `decode-and-verify-price-feeds` (whose fixed term is the signature + header overhead),
+> so their cost is already captured there.
 
 ## Block budget (Stacks epoch 3.x)
 
@@ -40,19 +41,21 @@ two public entry points. Two feed counts give a linear (fixed + per-feed) model.
 
 | operation | runtime | read_cnt | read_len | write_cnt | write_len |
 |---|--:|--:|--:|--:|--:|
-| `decode-and-verify` (3 feeds) | 7,870,573 | 9 | 21,508 | 0 | 0 |
-| `decode-and-verify` (16 feeds) | 34,442,456 | 9 | 21,508 | 0 | 0 |
-| `verify-and-update` end-to-end (3 feeds) | 8,678,374 | 30 | 45,054 | 3 | 882 |
-| `verify-and-update` end-to-end (16 feeds) | 38,709,908 | 56 | 45,288 | 16 | 4,704 |
+| `decode-and-verify` (3 feeds) | 7,907,458 | 9 | 22,243 | 0 | 0 |
+| `decode-and-verify` (16 feeds) | 34,868,847 | 9 | 22,243 | 0 | 0 |
+| `verify-and-update` end-to-end (3 feeds) | 8,673,838 | 34 | 59,857 | 3 | 882 |
+| `verify-and-update` end-to-end (16 feeds) | 39,039,875 | 60 | 60,091 | 16 | 4,704 |
 
-`verify-and-update-price-feeds` is the relayer's actual transaction: verify +
-parse + per-feed storage write + fee path.
+`verify-and-update-price-feeds` is the relayer's actual transaction: verify + parse +
+per-feed storage write + fee path. `decode-and-verify-price-feeds` is read-only (the
+oracle reaches it via `contract-call?`); the SDK meters read-only calls, so it is timed
+directly.
 
 ## Linear model (runtime)
 
-- **Decode only:** ≈ **1.74M fixed** (keccak256 + secp256k1 recovery + trusted-signer
-  lookup + header parse) **+ ≈2.04M per feed** (parser compute).
-- **End-to-end:** ≈ **1.75M fixed + ≈2.31M per feed**. The extra ~0.27M/feed over
+- **Decode only:** ≈ **1.69M fixed** (keccak256 + secp256k1 recovery + trusted-signer
+  lookup + header parse) **+ ≈2.07M per feed** (parser compute).
+- **End-to-end:** ≈ **1.67M fixed + ≈2.34M per feed**. The extra ~0.26M/feed over
   decode-only is the storage write (one `map-set`, the monotonic-guard read, the print).
 
 These are full 6-property feeds (price/exponent/confidence/best-bid/best-ask/
@@ -62,13 +65,13 @@ publisher-count all present) — roughly the per-feed worst case; sparser feeds 
 
 | dimension | share of block |
 |---|--:|
-| **runtime** | **0.7742%** |
-| read_count | 0.3733% |
-| read_length | 0.0453% |
+| **runtime** | **0.7808%** |
+| read_count | 0.4000% |
+| read_length | 0.0601% |
 | write_count | 0.1067% |
 | write_length | 0.0314% |
 
-Runtime is the binding dimension: ~129 such 16-feed submits would fill a block's
+Runtime is the binding dimension: ~128 such 16-feed submits would fill a block's
 runtime, i.e. ~2,000 feeds/block worth of updates.
 
 ## Interpretation
@@ -76,27 +79,16 @@ runtime, i.e. ~2,000 feeds/block worth of updates.
 - **Runtime dominates; storage I/O is negligible.** Parsing is pure buffer compute —
   feed count drives runtime but not read_count/read_length (those stay flat at 9 reads
   for `decode-and-verify` regardless of feed count: the governance trusted-signer read
-  plus contract code). Writes scale at one `map-set` per feed (~294 write_length bytes
-  per feed), trivially small.
-- **`get` on the threaded parse state is the per-feed cost lever.** The fold
-  accumulator carries the payload `(buff 8192)`, and every `(get field state)` costs
-  ~proportional to the *whole* tuple's size (~18K runtime each), no matter the field's
-  own type — while storing it back via `merge` is reference-shared and cheap. Reading
-  each field once per iteration (the payload buffer, the cursor, and the remaining
-  counter) instead of 2–3× cut per-feed runtime **~18%** (2.50M → 2.04M). The residual
+  plus contract code). Writes scale at one `map-set` per feed, trivially small.
+- **`get` on the threaded parse state is the per-feed cost lever.** The fold accumulator
+  carries the payload `(buff 8192)`, and every `(get field state)` costs ~proportional to
+  the *whole* tuple's size, no matter the field's own type — while storing it back via
+  `merge` is reference-shared and cheap. The parser binds each state field (payload,
+  cursor, remaining counter) once per iteration rather than re-`get`ting it; the residual
   per-feed cost is the byte reads + sign-extension + merges, which are irreducible for a
   safe per-feed parser without sacrificing generality.
 - **The `0 → none` collapse is not a regression risk.** It adds a single zero-compare
   branch per persisted field; the per-feed cost is dominated by the byte reads.
-
-## History
-
-The original scaffold estimate was ~1.9M runtime/feed and ~0.64% of a block for a
-16-feed update. Persisting three more properties per feed (best-bid/ask +
-publisher-count) plus the `0 → none` collapse raised per-feed to ~2.5M (~0.92%).
-Then de-duplicating repeated `get`s on the buffer-carrying fold state — the payload
-buffer, then the `remaining` counter — brought it to **~2.04M (~0.77%, ~129
-updates/block)**.
 
 ## Conclusion
 
