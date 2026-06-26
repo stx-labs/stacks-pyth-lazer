@@ -132,6 +132,19 @@ describe("pyth-lazer-oracle-v1: verify-and-update-price-feeds", () => {
     expect(submit(makeUpdate([feed(1, 1n, 0n, 1n, 5n)])).result).toBeOk(Cl.uint(1));
   });
 
+  it("treats a replayed update as an inert no-op (replay defense)", () => {
+    bootstrap();
+    // A captured, validly-signed update can be re-broadcast by anyone (the signature is
+    // still good). The per-feed monotonic guard is what neutralizes it: the replay carries
+    // the same publish-time, so it is not strictly newer than what it already wrote.
+    const update = makeUpdate([feed(1, 4_200_000_000n, -8n, 1_500_000n, 18n)]);
+    expect(submit(update).result).toBeOk(Cl.uint(1)); // first application writes
+    const replay = submit(update); // same bytes, re-submitted (even by a different relayer)
+    expect(replay.result).toBeOk(Cl.uint(0)); // nothing written
+    expect(replay.events.find((e) => e.event === "print_event")).toBeUndefined(); // no state change
+    expect(getPrice(1)).toBeOk(storedRecord(4_200_000_000n, -8n, 1_500_000n, 18n)); // unchanged
+  });
+
   it("charges the per-update fee from the relayer to the fee recipient", () => {
     bootstrap();
     simnet.callPublicFn(GOV, "set-fee", [Cl.uint(1000n)], deployer);
