@@ -75,7 +75,7 @@ function trustAll() {
 }
 
 const decode = (update: Uint8Array) =>
-  simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer).result;
+  simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer).result;
 const submit = (update: Uint8Array) =>
   simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [Cl.buffer(update), decoderRef], relayer).result;
 const getPrice = (feedId: number) =>
