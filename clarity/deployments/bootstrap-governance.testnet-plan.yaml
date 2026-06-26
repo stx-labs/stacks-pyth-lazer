@@ -1,0 +1,25 @@
+---
+id: 0
+name: Testnet governance bootstrap
+network: testnet
+stacks-node: "https://api.testnet.hiro.so"
+bitcoin-node: "http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332"
+plan:
+  batches:
+  - id: 0
+    transactions:
+    - transaction-type: contract-call
+      contract-id: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6.pyth-lazer-governance
+      expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
+      method: set-stale-price-threshold
+      parameters:
+      - "u7200"
+      cost: 50000
+    - transaction-type: contract-call
+      contract-id: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6.pyth-lazer-governance
+      expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
+      method: set-trusted-signers
+      parameters:
+      - "(list (tuple (pubkey 0x03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b) (expires-at u100000000000)))"
+      cost: 50000
+    epoch: "3.4"
