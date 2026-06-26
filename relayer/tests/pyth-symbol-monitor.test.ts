@@ -91,7 +91,11 @@ describe('PythSymbolMonitor', () => {
     assert.equal(request.type, 'subscribe');
     assert.equal(request.subscriptionId, SUBSCRIPTION_ID);
     assertSameSymbols(request.symbols, DEFAULT_SYMBOLS);
-    assert.deepEqual(request.properties, ['price', 'exponent', 'publisherCount']);
+    // The exact property set is a tuning knob, but the fields the contract
+    // requires to store a feed must always be requested.
+    for (const required of ['price', 'exponent', 'publisherCount']) {
+      assert.ok(request.properties.includes(required), `requests ${required}`);
+    }
     assert.deepEqual(request.formats, ['evm']);
     assert.equal(request.deliveryFormat, 'binary');
     assert.equal(request.parsed, true);

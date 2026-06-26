@@ -6,7 +6,8 @@ import { strict as assert } from 'node:assert';
  */
 const ESTIMATED_FEE = 1_000n;
 let confirmedNonce = 0n;
-let broadcastResult: unknown = { txid: '0xtx' };
+// The node returns a bare-hex txid; the submitter prefixes it with `0x`.
+let broadcastResult: unknown = { txid: 'tx' };
 
 /** Mocked `@stacks/transactions`. */
 const makeContractCallFn = mock.fn(async (opts: any) => ({
@@ -65,7 +66,7 @@ function lastCallOpts(): any {
 describe('PriceUpdateTransactionSubmitter', () => {
   beforeEach(() => {
     confirmedNonce = 0n;
-    broadcastResult = { txid: '0xtx' };
+    broadcastResult = { txid: 'tx' };
     makeContractCallFn.mock.resetCalls();
     broadcastFn.mock.resetCalls();
     requestFn.mock.resetCalls();
@@ -78,10 +79,10 @@ describe('PriceUpdateTransactionSubmitter', () => {
 
   test('builds and broadcasts a fresh tx at the confirmed nonce', async () => {
     confirmedNonce = 5n;
-    broadcastResult = { txid: '0xabc' };
+    broadcastResult = { txid: 'abc123' };
     const result = await newSubmitter().submit(EVM);
 
-    assert.deepEqual(result, { ok: true, txId: '0xabc' });
+    assert.deepEqual(result, { ok: true, txId: '0xabc123' });
 
     const opts = lastCallOpts();
     assert.equal(opts.nonce, 5n);

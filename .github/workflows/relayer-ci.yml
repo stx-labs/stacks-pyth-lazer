@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  relayer-tests:
+  tests:
     strategy:
       fail-fast: false
       matrix:
