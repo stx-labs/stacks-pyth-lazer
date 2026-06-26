@@ -162,12 +162,11 @@
 								(match (get exponent feed) exponent
 									(match (get publisher-count feed) publisher-count
 										;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
-										;; #[allow(panic)]
-										(unwrap-panic (as-max-len? (append feeds (merge feed {
+										(unwrap! (as-max-len? (append feeds (merge feed {
 											price: price,
 											exponent: exponent,
 											publisher-count: publisher-count
-										})) u16))
+										})) u16) ERR_TOO_MANY_FEEDS)
 										feeds)
 									feeds)
 								feeds)))
@@ -324,7 +323,7 @@
 ;; #[allow(case_fn)]
 (define-private (read-uint-be? (bytes (buff 8192)) (pos uint) (size uint))
 	(match (slice? bytes pos (+ pos size))
-		b (some (buff-to-uint-be (unwrap-panic (as-max-len? b u16))))
+		b (some (buff-to-uint-be (unwrap! (as-max-len? b u16) none)))
 		none))
 
 ;; #[allow(case_fn)]
@@ -332,5 +331,5 @@
 	(match (slice? bytes pos (+ pos size))
 		b (let ((shift (* (- u16 size) u8)))
 			;; Sign-extend an N-byte two's-complement value: shift the sign bit to bit 127 and back.
-			(some (bit-shift-right (bit-shift-left (buff-to-int-be (unwrap-panic (as-max-len? b u16))) shift) shift)))
+			(some (bit-shift-right (bit-shift-left (buff-to-int-be (unwrap! (as-max-len? b u16) none)) shift) shift)))
 		none))
