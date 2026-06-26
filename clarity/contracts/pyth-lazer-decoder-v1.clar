@@ -124,61 +124,20 @@
 				(ok {
 					timestamp: timestamp,
 					channel: channel,
-					price-feeds: (fold collect-storable-feed (get feeds state) (list))
+					price-feeds: (get feeds state)
 				})))))
 
-;; Fold step: Filter out feeds which don't have the required fields (`price`/`exponent`/`publisher-count`)
-;; Can't use `filter` since `acc` type is different (optionality removed)
-(define-private (collect-storable-feed
-		(feed {
-			feed-id: uint,
-			price: (optional int),
-			exponent: (optional int),
-			confidence: (optional uint),
-			publisher-count: (optional uint),
-			best-bid: (optional int),
-			best-ask: (optional int),
-			ema-price: (optional int),
-			ema-confidence: (optional uint),
-			feed-update-timestamp: (optional uint)
-		})
-		(acc (list 16 {
-			feed-id: uint,
-			price: int,
-			exponent: int,
-			publisher-count: uint,
-			confidence: (optional uint),
-			best-bid: (optional int),
-			best-ask: (optional int),
-			ema-price: (optional int),
-			ema-confidence: (optional uint),
-			feed-update-timestamp: (optional uint)
-		})))
-	(match (get price feed) price
-		(match (get exponent feed) exponent
-			(match (get publisher-count feed) publisher-count
-				;; #[allow(panic)]
-				(unwrap-panic (as-max-len?
-					(append acc (merge feed {
-						price: price,
-						exponent: exponent,
-						publisher-count: publisher-count
-					})) u16)) ;; NOTE: `as-max-len?` requires LITERAL bound, not the MAX_FEEDS constant
-				acc)
-			acc)
-		acc))
-
 ;; Outer-fold step: stop once errored or all declared feeds are parsed (remaining 0),
-;; else parse the next feed at the cursor and append it.
+;; else parse the next feed at the cursor and append it (dropped if missing a required field).
 (define-private (parse-feed-slot
 		(slot_ uint)
 		(acc (response {
 			bytes: (buff 8192), offset: uint, remaining: uint, feeds: (list 16 {
 				feed-id: uint,
-				price: (optional int),
-				exponent: (optional int),
+				price: int,
+				exponent: int,
 				confidence: (optional uint),
-				publisher-count: (optional uint),
+				publisher-count: uint,
 				best-bid: (optional int),
 				best-ask: (optional int),
 				ema-price: (optional int),
@@ -191,13 +150,28 @@
 			(let ((remaining (get remaining state)))
 				(if (is-eq remaining u0)
 					acc
-					(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state)))))
+					(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state))))
+							(feed (get feed parsed))
+							(feeds (get feeds state))
+							;; Keep the feed only if it carries all required fields, collapsing those
+							;; three from optional to bare. Not a `filter`: the element type changes.
+							(next-feeds (match (get price feed) price
+								(match (get exponent feed) exponent
+									(match (get publisher-count feed) publisher-count
+										;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
+										;; #[allow(panic)]
+										(unwrap-panic (as-max-len? (append feeds (merge feed {
+											price: price,
+											exponent: exponent,
+											publisher-count: publisher-count
+										})) u16))
+										feeds)
+									feeds)
+								feeds)))
 						(ok (merge state {
 							offset: (get offset parsed),
 							remaining: (- remaining u1),
-							;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
-							;; #[allow(panic)]
-							feeds: (unwrap-panic (as-max-len? (append (get feeds state) (get feed parsed)) u16))
+							feeds: next-feeds
 						})))))
 		e (err e)))
 
