@@ -19,6 +19,7 @@ export const PairsRoutes: FastifyPluginCallback<
       },
     },
     async (request, reply) => {
+      // TODO: Improve this endpoint depending on partner API design
       config.priceMonitor.requestPriceUpdate(request.body.symbol);
       return reply.status(200).send({
         message: 'Price update received',
