@@ -1,14 +1,13 @@
 ;; Title: pyth-lazer-decoder
 ;; Version: v1
 ;;
-;; Description: Verifies update signatures and parses Lazer payloads into price feeds
-;;
-;; The only swappable contract, and the security-critical one: EVM-envelope parse,
-;; secp256k1 signature recovery, trusted-signer check (reads governance), payload parse.
-;;   - Phase 1: signature verification + trusted-signer check
+;; Description: Processes raw update messages from Pyth. Has two phases
+;;   - Phase 1: Signature verification + trusted-signer check
 ;;   - Phase 2: Lazer payload/feed parser
-;; Byte order is big-endian, matching the EVM PythLazerLib (anchored by golden fixtures).
-;; v1 is secp256k1/`evm`-only; ed25519 (`solana`) support would need a future decoder.
+;;
+;; This contract is stateless, and unlike other Pyth contracts, can be easily updated
+;;
+;; Currently supports is secp256k1/evm format only, ed25519/solana could be added in future update
 
 ;; Implements the swappable decoder interface the oracle dispatches.
 (impl-trait .pyth-lazer-traits.decoder-trait)
@@ -27,16 +26,21 @@
 (define-constant LEN_OFFSET u69)
 (define-constant PAYLOAD_OFFSET u71)
 
-;; -- Lazer payload header: magic(4) timestamp(8) channel(1) feedsLen(1) --
+;; -- Lazer payload header --
+;;   [0:4]   magic (uint32 BE)
+;;   [4:12]  timestamp (uint64 BE)
+;;   [12]    channel (uint8)
+;;   [13]    feeds_len (uint8)
+;;   [14:]   feeds (the per-feed records)
 (define-constant FORMAT_MAGIC u2479346549) ;; 0x93c7d375
 (define-constant PAYLOAD_TIMESTAMP_OFFSET u4)
 (define-constant PAYLOAD_CHANNEL_OFFSET u12)
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property type tags the v1 decoder persists. Other valid types are skipped (the cursor
-;; still advances past them). ema-* and feed-update-timestamp are not in the v1
-;; subscription, so they are left none.
+;; Property type tags the decoder recognizes
+;; Other valid types are skipped
+;; `ema-*` and `feed-update-timestamp` are not in the v1 subscription, so they are left `none`
 (define-constant PROP_PRICE u0)            ;; int64
 (define-constant PROP_BEST_BID u1)         ;; int64
 (define-constant PROP_BEST_ASK u2)         ;; int64
@@ -45,43 +49,41 @@
 (define-constant PROP_CONFIDENCE u5)       ;; uint64
 (define-constant MAX_PROPERTY_TYPE u12)
 
-;; Max feeds parsed per update; more are rejected. Bump by extending FEED_SLOTS and the
-;; (list 16 ...) types below.
+;; Max feeds parsed per update. Must match size of `FEED_SLOTS`
 (define-constant MAX_FEEDS u16)
 (define-constant FEED_SLOTS (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15))
 (define-constant PROPERTY_SLOTS (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12))
 
-;; Errors -- envelope / signature (Phase 1)
+;; Errors: Envelope / signature (Phase 1)
 (define-constant ERR_INPUT_TOO_SHORT (err u2101))
 (define-constant ERR_INVALID_EVM_MAGIC (err u2102))
 (define-constant ERR_OVERLAY_PRESENT (err u2103))
 (define-constant ERR_INVALID_SIGNATURE (err u2104))
 (define-constant ERR_UNTRUSTED_SIGNER (err u2105))
 
-;; Errors -- payload / feeds (Phase 2). The parsing folds carry their accumulator as a
-;; (response state uint), so a callback can fail mid-fold with try!/unwrap!/asserts! and
-;; decode-payload surfaces it with a plain try!.
+;; Errors: Payload / feeds (Phase 2)
 (define-constant ERR_INVALID_PAYLOAD_MAGIC (err u2201))
 (define-constant ERR_TOO_MANY_FEEDS (err u2202))
-(define-constant ERR_INVALID_FEED_DATA (err u2203)) ;; truncated / short read while parsing a feed
+(define-constant ERR_INVALID_FEED_DATA (err u2203)) ;; Truncated / short read while parsing a feed
 (define-constant ERR_PAYLOAD_OVERLAY (err u2204))
-(define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; property type > MAX_PROPERTY_TYPE
-(define-constant ERR_TOO_MANY_PROPS (err u2206))    ;; feed declares more properties than exist
+(define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; Property type > MAX_PROPERTY_TYPE
+(define-constant ERR_TOO_MANY_PROPS (err u2206))    ;; Feed declares more properties than exist
 
-;;;; Verification + decode entry points
+;;;; Read-only functions
 
-;; Parse the EVM envelope and recover the payload signer (no trust check -- see verify-update)
+;; Parse EVM envelope and recover payload signer
 (define-read-only (recover-signer (update (buff 8192)))
 	(let ((update-len (len update)))
 		;; Must contain the fixed envelope header
 		(asserts! (>= update-len PAYLOAD_OFFSET) ERR_INPUT_TOO_SHORT)
+		;; Check magic number
 		(asserts! (is-eq (unwrap! (read-uint-be? update u0 u4) ERR_INPUT_TOO_SHORT) EVM_FORMAT_MAGIC) ERR_INVALID_EVM_MAGIC)
 		(let ((signature-bytes (unwrap! (slice? update SIG_OFFSET LEN_OFFSET) ERR_INPUT_TOO_SHORT))
 				(signature (unwrap! (as-max-len? signature-bytes u65) ERR_INVALID_SIGNATURE))
 				(payload-len (unwrap! (read-uint-be? update LEN_OFFSET u2) ERR_INPUT_TOO_SHORT))
 				(payload-end (+ PAYLOAD_OFFSET payload-len))
 				(payload (unwrap! (slice? update PAYLOAD_OFFSET payload-end) ERR_INPUT_TOO_SHORT)))
-			;; Reject trailing bytes past the signed payload (not covered by the signature)
+			;; Reject trailing bytes past the signed payload
 			(asserts! (is-eq update-len payload-end) ERR_OVERLAY_PRESENT)
 			;; keccak256(payload) is the signed message hash
 			(let ((signer (unwrap! (secp256k1-recover? (keccak256 payload) signature) ERR_INVALID_SIGNATURE)))
@@ -90,25 +92,19 @@
 					payload: payload
 				})))))
 
-;; Recover the signer and assert it is a trusted, non-expired Lazer signer. The trusted
-;; set lives in governance; the membership + expiry check lives here.
+;; Recover signer and check against trusted signers
 (define-read-only (verify-update (update (buff 8192)))
 	(let ((recovered (try! (recover-signer update))))
 		(asserts! (is-signer-trusted (get signer recovered)) ERR_UNTRUSTED_SIGNER)
 		(ok recovered)))
 
-;; Verify, then parse the payload into price feeds. Public (not read-only) only because
-;; Clarity trait methods cannot be read-only; it is still pure, so off-chain callers can
-;; read it.
-(define-public (decode-and-verify-price-feeds (update (buff 8192)))
+;; Verify signature and parse entire message
+(define-read-only (decode-and-verify-price-feeds (update (buff 8192)))
 	(let ((verified (try! (verify-update update))))
-		(decode-payload (get payload verified))))
+		(decode-lazer-payload (get payload verified))))
 
-;;;; Payload parsing (Phase 2)
-
-;; Parse a verified payload: header + sequential feeds (TLV: type byte + type-width value).
-;; The final exact-length check guarantees every property width was honored.
-(define-read-only (decode-payload (payload (buff 8192)))
+;; Parse Lazer payload
+(define-read-only (decode-lazer-payload (payload (buff 8192)))
 	(begin
 		(asserts! (>= (len payload) FEEDS_OFFSET) ERR_INVALID_FEED_DATA)
 		(asserts! (is-eq (unwrap! (read-uint-be? payload u0 u4) ERR_INVALID_PAYLOAD_MAGIC) FORMAT_MAGIC) ERR_INVALID_PAYLOAD_MAGIC)
@@ -117,7 +113,12 @@
 				(feeds-len (unwrap! (read-uint-be? payload PAYLOAD_FEEDS_LEN_OFFSET u1) ERR_INVALID_FEED_DATA)))
 			(asserts! (<= feeds-len MAX_FEEDS) ERR_TOO_MANY_FEEDS)
 			(let ((state (try! (fold parse-feed-slot FEED_SLOTS
-					(ok { bytes: payload, offset: FEEDS_OFFSET, remaining: feeds-len, feeds: (list) })))))
+					(ok {
+						bytes: payload,
+						offset: FEEDS_OFFSET,
+						remaining: feeds-len,
+						feeds: (list)
+					})))))
 				;; Feeds must consume the payload exactly (no trailing overlay)
 				(asserts! (is-eq (get offset state) (len payload)) ERR_PAYLOAD_OVERLAY)
 				(ok {
@@ -126,25 +127,43 @@
 					price-feeds: (fold collect-storable-feed (get feeds state) (list))
 				})))))
 
-;; Fold step: append the feed unwrapped to the trait/storage shape, or drop it when a
-;; required field (price/exponent/publisher-count) is absent. merge overrides just those
-;; three (optional -> bare); the optional fields ride through unchanged.
+;; Fold step: Filter out feeds which don't have the required fields (`price`/`exponent`/`publisher-count`)
+;; Can't use `filter` since `acc` type is different (optionality removed)
 (define-private (collect-storable-feed
-		(feed { feed-id: uint, price: (optional int), exponent: (optional int),
-			confidence: (optional uint), publisher-count: (optional uint),
-			best-bid: (optional int), best-ask: (optional int), ema-price: (optional int),
-			ema-confidence: (optional uint), feed-update-timestamp: (optional uint) })
-		(acc (list 16 { feed-id: uint, price: int, exponent: int, publisher-count: uint,
-			confidence: (optional uint), best-bid: (optional int), best-ask: (optional int),
-			ema-price: (optional int), ema-confidence: (optional uint),
-			feed-update-timestamp: (optional uint) })))
+		(feed {
+			feed-id: uint,
+			price: (optional int),
+			exponent: (optional int),
+			confidence: (optional uint),
+			publisher-count: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int),
+			ema-price: (optional int),
+			ema-confidence: (optional uint),
+			feed-update-timestamp: (optional uint)
+		})
+		(acc (list 16 {
+			feed-id: uint,
+			price: int,
+			exponent: int,
+			publisher-count: uint,
+			confidence: (optional uint),
+			best-bid: (optional int),
+			best-ask: (optional int),
+			ema-price: (optional int),
+			ema-confidence: (optional uint),
+			feed-update-timestamp: (optional uint)
+		})))
 	(match (get price feed) price
 		(match (get exponent feed) exponent
 			(match (get publisher-count feed) publisher-count
-				;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
+				;; #[allow(panic)]
 				(unwrap-panic (as-max-len?
-					(append acc (merge feed { price: price, exponent: exponent, publisher-count: publisher-count }))
-					u16))
+					(append acc (merge feed {
+						price: price,
+						exponent: exponent,
+						publisher-count: publisher-count
+					})) u16)) ;; NOTE: `as-max-len?` requires LITERAL bound, not the MAX_FEEDS constant
 				acc)
 			acc)
 		acc))
@@ -152,12 +171,21 @@
 ;; Outer-fold step: stop once errored or all declared feeds are parsed (remaining 0),
 ;; else parse the next feed at the cursor and append it.
 (define-private (parse-feed-slot
-		(slot uint)
-		(acc (response { bytes: (buff 8192), offset: uint, remaining: uint,
-			feeds: (list 16 { feed-id: uint, price: (optional int), exponent: (optional int),
-				confidence: (optional uint), publisher-count: (optional uint),
-				best-bid: (optional int), best-ask: (optional int), ema-price: (optional int),
-				ema-confidence: (optional uint), feed-update-timestamp: (optional uint) }) } uint)))
+		(slot_ uint)
+		(acc (response {
+			bytes: (buff 8192), offset: uint, remaining: uint, feeds: (list 16 {
+				feed-id: uint,
+				price: (optional int),
+				exponent: (optional int),
+				confidence: (optional uint),
+				publisher-count: (optional uint),
+				best-bid: (optional int),
+				best-ask: (optional int),
+				ema-price: (optional int),
+				ema-confidence: (optional uint),
+				feed-update-timestamp: (optional uint)
+			})
+		} uint)))
 	(match acc
 		state
 			(let ((remaining (get remaining state)))
@@ -168,7 +196,9 @@
 							offset: (get offset parsed),
 							remaining: (- remaining u1),
 							;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
-							feeds: (unwrap-panic (as-max-len? (append (get feeds state) (get feed parsed)) u16)) })))))
+							;; #[allow(panic)]
+							feeds: (unwrap-panic (as-max-len? (append (get feeds state) (get feed parsed)) u16))
+						})))))
 		e (err e)))
 
 ;; Parse one feed (feed-id, num-properties, then its properties); returns the feed plus
@@ -195,7 +225,7 @@
 ;; Inner-fold step: read the next property's type, persist it if relevant, and advance
 ;; the cursor by 1 (type byte) + the value width.
 (define-private (parse-property
-		(slot uint)
+		(slot_ uint)
 		(acc (response { bytes: (buff 8192), offset: uint, remaining: uint,
 			price: (optional int), exponent: (optional int), confidence: (optional uint),
 			publisher-count: (optional uint), best-bid: (optional int), best-ask: (optional int) } uint)))
