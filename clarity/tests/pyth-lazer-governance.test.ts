@@ -116,6 +116,22 @@ describe("pyth-lazer-governance: pause", () => {
     expect(simnet.callPublicFn(GOV, "pause", [], wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
 
+  it("rejects unpause from a principal without the pause role", () => {
+    // Symmetric to pause: an account holding no roles can neither halt nor resume the
+    // protocol. (Tested independently because unpause is the one function exempt from
+    // the pause gate, so its auth check is the only thing standing between a stranger
+    // and silently resuming a protocol an operator deliberately halted.)
+    expect(simnet.callPublicFn(GOV, "unpause", [], wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+
+  it("keeps governance distinct from pause (a governance-only holder cannot halt/resume)", () => {
+    // The mirror of "pause distinct from governance": holding the GOVERNANCE role grants
+    // no emergency-stop power. wallet1 gets governance only (no pause grant).
+    setRole(wallet1, ROLE_GOVERNANCE, true);
+    expect(simnet.callPublicFn(GOV, "pause", [], wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+    expect(simnet.callPublicFn(GOV, "unpause", [], wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+
   it("blocks governance config changes while paused, yet unpause still works", () => {
     expect(simnet.callPublicFn(GOV, "pause", [], deployer).result).toBeOk(Cl.bool(true));
     // blocked with ERR_PAUSED even though the deployer holds the governance role
@@ -209,5 +225,13 @@ describe("pyth-lazer-governance: fee + fee recipient", () => {
 
   it("rejects a non-governance principal setting the fee", () => {
     expect(setFee(2500n, wallet1).result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+
+  it("rejects a non-governance principal setting the fee recipient", () => {
+    // The fee recipient is where every collected fee lands, so an open setter would let
+    // anyone redirect protocol revenue to themselves. Must require the governance role.
+    expect(
+      simnet.callPublicFn(GOV, "set-fee-recipient", [Cl.principal(wallet1)], wallet1).result,
+    ).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
 });
