@@ -287,16 +287,19 @@
 
 ;;;; Trusted-signer check (Phase 1)
 
-;; True if `signer` matches a governance-listed trusted signer that has not expired
+;; True if `signer` matches a governance-listed trusted signer that has not expired.
+;; Fails closed: if block time is unreadable, signer expiry can't be evaluated, so trust nobody
+;; (matches the storage staleness check, which also errors when time is unavailable).
 (define-private (is-signer-trusted (signer (buff 33)))
-	(let ((now (default-to u0 (get-stacks-block-info? time (- stacks-block-height u1)))))
-		(get trusted (fold check-trusted-signer
+	(match (get-stacks-block-info? time (- stacks-block-height u1))
+		now (get trusted (fold check-trusted-signer
 			(contract-call? .pyth-lazer-governance get-trusted-signers)
 			{
 				target: signer,
 				now: now,
 				trusted: false
-			}))))
+			}))
+		false))
 
 (define-private (check-trusted-signer
 		(entry {
