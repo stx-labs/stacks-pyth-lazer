@@ -71,6 +71,8 @@
 ;; Batch-write up to 16 price feeds
 ;; Updates not newer than what we already have are skipped
 ;; Returns the number of feeds actually written
+;;
+;; NOTE: Caller is responsible for checking if protocol is paused!
 (define-public (write (batch (list 16 {
 		feed-id: uint,
 		record: {
