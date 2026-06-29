@@ -133,7 +133,7 @@ export class PriceUpdateTransactionSubmitter {
     fee: bigint,
     replacing: boolean
   ): SubmitResult {
-    const txId = `0x${result.txid}`;
+    const txId = result.txid.startsWith('0x') ? result.txid : `0x${result.txid}`;
 
     if (!('error' in result)) {
       this.pending = { nonce, fee };

@@ -1,7 +1,7 @@
 import Fastify, { type FastifyPluginAsync } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import FastifyCors from '@fastify/cors';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { PINO_LOGGER_CONFIG } from '@stacks/api-toolkit';
 import { PairsRoutes } from './routes/pairs.js';
 import type { PythSymbolMonitor } from '../relayer/pyth-symbol-monitor.ts';

@@ -181,7 +181,8 @@ export class PriceUpdatePlanner {
         }
       })
       .catch(error => {
-        logger.error(error, `${this.constructor.name} submission interrupted: ${error.message}`);
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(error, `${this.constructor.name} submission interrupted: ${message}`);
       })
       .finally(() => {
         this.inFlight = false;

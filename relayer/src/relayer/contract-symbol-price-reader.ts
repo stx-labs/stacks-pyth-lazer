@@ -24,7 +24,7 @@ interface ReadOnlyResult {
  */
 export class ContractSymbolPriceReader {
   private readonly client: CoreRpcClient;
-  /** Principal used as the `sender` of read-only calls (value is irrelevant). */
+  /** Deployer principal for the Pyth Lazer contracts (also used as the sender for read-only calls). */
   private readonly sender: string;
 
   constructor(options: { sender: string; rpcBaseUrl: string }) {
