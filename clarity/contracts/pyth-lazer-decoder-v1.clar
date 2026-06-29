@@ -7,7 +7,7 @@
 ;;
 ;; This contract is stateless, and unlike other Pyth contracts, can be easily updated
 ;;
-;; Currently supports is secp256k1/evm format only, ed25519/solana could be added in future update
+;; Currently supports secp256k1/evm format only. ed25519/solana could be added in future update
 
 ;; Implements the swappable decoder interface the oracle dispatches.
 (impl-trait .pyth-lazer-traits.decoder-trait)

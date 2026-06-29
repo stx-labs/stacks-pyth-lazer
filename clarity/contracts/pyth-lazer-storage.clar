@@ -60,9 +60,9 @@
 			(threshold (contract-call? .pyth-lazer-governance get-stale-price-threshold))
 			(now (unwrap! (get-stacks-block-info? time (- stacks-block-height u1)) ERR_NO_BLOCK_TIME))
 			(publish-time-seconds (/ (get publish-time entry) MICROS_PER_SECOND)))
-		;; Fresh while `now - publish-time-seconds <= threshold`
-		;; Written as `publish + threshold >= now` so it never underflows a uint
-		;; TODO: Double check that `now` can never be less than `publish-time-seconds`
+		;; Fresh while `now - publish-time-seconds <= threshold`, rearranged to
+		;; `publish + threshold >= now` so a publish-time ahead of block time (Lazer and
+		;; Stacks keep independent clocks) reads as fresh rather than underflowing the uint
 		(asserts! (>= (+ publish-time-seconds threshold) now) ERR_STALE_PRICE)
 		(ok entry)))
 

@@ -33,8 +33,7 @@
 (map-set roles { who: tx-sender, role: ROLE_GOVERNANCE } true)
 (map-set roles { who: tx-sender, role: ROLE_PAUSE } true)
 
-;; If true, all governance and protocol activity is disabled
-;; TODO: Check that this pauses all protocol activity
+;; If true, all governance and state-modifying protocol activity is disabled
 (define-data-var paused bool false)
 
 ;; Trusted Lazer signers
