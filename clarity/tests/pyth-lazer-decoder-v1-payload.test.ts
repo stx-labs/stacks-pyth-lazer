@@ -31,31 +31,30 @@ function trust() {
 
 function decode(payload: Uint8Array) {
   const update = buildEvmUpdate(payload);
-  // decode-and-verify-price-feeds is public (it backs the decoder-trait), so call
-  // it as a tx; it is pure, so the result is identical to a read-only eval.
-  return simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer)
+  return simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer)
     .result;
 }
 
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
-// The decoded per-feed shape. price/exponent/confidence/publisher-count/best-bid/
-// best-ask are populated when the property is present; ema-* and
-// feed-update-timestamp are always `none` (the v1 decoder does not persist them).
+// The decoded per-feed shape. price/exponent/publisher-count are required (the decoder
+// drops feeds missing them); confidence/best-bid/best-ask are populated when present;
+// ema-* and feed-update-timestamp are always `none` (the v1 decoder does not persist them).
 const feedRecord = (
   id: number,
-  price: bigint | null,
-  expo: bigint | null,
-  conf: bigint | null,
-  extra: { pub?: bigint | null; bid?: bigint | null; ask?: bigint | null } = {},
+  price: bigint,
+  expo: bigint,
+  pub: bigint,
+  conf: bigint | null = null,
+  extra: { bid?: bigint | null; ask?: bigint | null } = {},
 ) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
-    price: optInt(price),
-    exponent: optInt(expo),
+    price: Cl.int(price),
+    exponent: Cl.int(expo),
     confidence: optUint(conf),
-    "publisher-count": optUint(extra.pub ?? null),
+    "publisher-count": Cl.uint(pub),
     "best-bid": optInt(extra.bid ?? null),
     "best-ask": optInt(extra.ask ?? null),
     "ema-price": Cl.none(),
@@ -67,14 +66,14 @@ const decoded = (channel: number, feeds: ReturnType<typeof feedRecord>[]) =>
   Cl.tuple({ timestamp: Cl.uint(TS), channel: Cl.uint(channel), "price-feeds": Cl.list(feeds) });
 
 describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)", () => {
-  it("decodes a single feed with price / exponent / confidence", () => {
+  it("decodes a single feed with price / exponent / confidence / publisher-count", () => {
     trust();
     const payload = buildLazerPayload({
       timestamp: TS,
       channel: REAL_TIME,
-      feeds: [{ id: 1, props: [[PROP.Price, 4_200_000_000n], [PROP.Exponent, -8n], [PROP.Confidence, 1_500_000n]] }],
+      feeds: [{ id: 1, props: [[PROP.Price, 4_200_000_000n], [PROP.Exponent, -8n], [PROP.Confidence, 1_500_000n], [PROP.PublisherCount, 9n]] }],
     });
-    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(1, 4_200_000_000n, -8n, 1_500_000n)]));
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(1, 4_200_000_000n, -8n, 9n, 1_500_000n)]));
   });
 
   it("decodes multiple feeds (including a negative price)", () => {
@@ -83,12 +82,12 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
       timestamp: TS,
       channel: REAL_TIME,
       feeds: [
-        { id: 1, props: [[PROP.Price, 100n], [PROP.Exponent, -2n], [PROP.Confidence, 5n]] },
-        { id: 2, props: [[PROP.Price, -50n], [PROP.Exponent, -4n], [PROP.Confidence, 9n]] },
+        { id: 1, props: [[PROP.Price, 100n], [PROP.Exponent, -2n], [PROP.Confidence, 5n], [PROP.PublisherCount, 2n]] },
+        { id: 2, props: [[PROP.Price, -50n], [PROP.Exponent, -4n], [PROP.Confidence, 9n], [PROP.PublisherCount, 3n]] },
       ],
     });
     expect(decode(payload)).toBeOk(
-      decoded(REAL_TIME, [feedRecord(1, 100n, -2n, 5n), feedRecord(2, -50n, -4n, 9n)]),
+      decoded(REAL_TIME, [feedRecord(1, 100n, -2n, 2n, 5n), feedRecord(2, -50n, -4n, 3n, 9n)]),
     );
   });
 
@@ -110,7 +109,7 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
       }],
     });
     expect(decode(payload)).toBeOk(
-      decoded(REAL_TIME, [feedRecord(7, 777n, -6n, 3n, { pub: 12n, bid: 776n, ask: 778n })]),
+      decoded(REAL_TIME, [feedRecord(7, 777n, -6n, 12n, 3n, { bid: 776n, ask: 778n })]),
     );
   });
 
@@ -119,20 +118,23 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     const payload = buildLazerPayload({
       timestamp: TS,
       channel: REAL_TIME,
-      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.EmaPrice, 999n], [PROP.Exponent, -3n], [PROP.Confidence, 2n]] }],
+      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.EmaPrice, 999n], [PROP.Exponent, -3n], [PROP.Confidence, 2n], [PROP.PublisherCount, 1n]] }],
     });
     // EmaPrice is advanced-over (its width is honored) and left `none`; the rest parse.
-    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 2n)]));
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, 2n)]));
   });
 
-  it("returns none for properties a feed omits", () => {
+  it("drops a feed missing a required field, keeping the complete ones", () => {
     trust();
     const payload = buildLazerPayload({
       timestamp: TS,
       channel: REAL_TIME,
-      feeds: [{ id: 3, props: [[PROP.Price, 42n]] }],
+      feeds: [
+        { id: 3, props: [[PROP.Price, 42n]] }, // no exponent / publisher-count -> dropped
+        { id: 5, props: [[PROP.Price, 7n], [PROP.Exponent, -1n], [PROP.PublisherCount, 4n]] },
+      ],
     });
-    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(3, 42n, null, null)]));
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(5, 7n, -1n, 4n)]));
   });
 
   it("rejects a wrong payload magic", () => {

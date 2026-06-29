@@ -1,5 +1,5 @@
 {
-  "description": "one update mixing feed shapes: a full feed, a price-only feed, an all-zero feed (only exponent survives), and a feed that LEADS with an unpersisted property (EmaPrice) before its persisted ones",
+  "description": "one update mixing feed shapes: a full feed (kept), a price-only feed (dropped: no exponent/publisher-count), an all-zero feed (dropped: price is the 0 sentinel), and a feed that LEADS with an unpersisted property (EmaPrice) before its persisted ones (kept). Exercises selective dropping alongside out-of-order/unpersisted-property parsing",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [

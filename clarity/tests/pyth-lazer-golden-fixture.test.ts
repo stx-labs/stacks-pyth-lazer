@@ -33,23 +33,24 @@ const ERR_UNTRUSTED_SIGNER = 2105;
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
-// Expected decoded per-feed tuple (full v1 shape). ema-* and feed-update-timestamp
-// are never produced by the v1 decoder, so they are always `none`.
+// Expected decoded per-feed tuple (full v1 shape). price/exponent/publisher-count are
+// required (the decoder drops feeds missing them); ema-* and feed-update-timestamp are
+// never produced by the v1 decoder, so they are always `none`.
 const feedRecord = (
   id: number,
   price: bigint,
   expo: bigint,
   conf: bigint | null,
-  pub: bigint | null,
+  pub: bigint,
   bid: bigint | null,
   ask: bigint | null,
 ) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
-    price: Cl.some(Cl.int(price)),
-    exponent: Cl.some(Cl.int(expo)),
+    price: Cl.int(price),
+    exponent: Cl.int(expo),
     confidence: optUint(conf),
-    "publisher-count": optUint(pub),
+    "publisher-count": Cl.uint(pub),
     "best-bid": optInt(bid),
     "best-ask": optInt(ask),
     "ema-price": Cl.none(),
@@ -112,8 +113,8 @@ const PROD_DECODE = Cl.tuple({
 });
 
 describe("pyth-lazer-decoder-v1: REAL Lazer evm golden fixtures (byte-order anchor)", () => {
-  it("STAGING: decode-payload matches Pyth's own decoded values (big-endian)", () => {
-    const { result } = simnet.callReadOnlyFn(DECODER, "decode-payload", [Cl.buffer(STAGING_PAYLOAD)], deployer);
+  it("STAGING: decode-lazer-payload matches Pyth's own decoded values (big-endian)", () => {
+    const { result } = simnet.callReadOnlyFn(DECODER, "decode-lazer-payload", [Cl.buffer(STAGING_PAYLOAD)], deployer);
     expect(result).toBeOk(STAGING_DECODE);
   });
 
@@ -124,13 +125,13 @@ describe("pyth-lazer-decoder-v1: REAL Lazer evm golden fixtures (byte-order anch
 
   it("STAGING: decode-and-verify accepts the update end-to-end when its signer is trusted", () => {
     trust(STAGING_SIGNER);
-    const { result } = simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(STAGING_UPDATE)], deployer);
+    const { result } = simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(STAGING_UPDATE)], deployer);
     expect(result).toBeOk(STAGING_DECODE);
   });
 
   it("PRODUCTION: decode-and-verify matches the SDK decode for a real multi-feed update", () => {
     trust(PROD_SIGNER);
-    const { result } = simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(PROD_UPDATE)], deployer);
+    const { result } = simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(PROD_UPDATE)], deployer);
     expect(result).toBeOk(PROD_DECODE);
   });
 
@@ -141,7 +142,7 @@ describe("pyth-lazer-decoder-v1: REAL Lazer evm golden fixtures (byte-order anch
 
   it("rejects a real update when its signer is not trusted (the signer path is genuinely exercised)", () => {
     // No trust() seeding: an empty trusted-signer set must reject even valid bytes.
-    const { result } = simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(PROD_UPDATE)], deployer);
+    const { result } = simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(PROD_UPDATE)], deployer);
     expect(result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 });
