@@ -149,33 +149,28 @@
 				feed-update-timestamp: (optional uint)
 			})
 		} uint)))
-	(match acc
-		state
-			(let ((remaining (get remaining state)))
-				(if (is-eq remaining u0)
-					acc
-					(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state))))
-							(feed (get feed parsed))
-							(feeds (get feeds state))
-							;; Keep the feed only if it has all required fields
-							(next-feeds (match (get price feed) price
-								(match (get exponent feed) exponent
-									(match (get publisher-count feed) publisher-count
-										;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
-										(unwrap! (as-max-len? (append feeds (merge feed {
-											price: price,
-											exponent: exponent,
-											publisher-count: publisher-count
-										})) u16) ERR_TOO_MANY_FEEDS)
-										feeds)
-									feeds)
-								feeds)))
-						(ok (merge state {
-							offset: (get offset parsed),
-							remaining: (- remaining u1),
-							feeds: next-feeds
-						})))))
-		e (err e)))
+	(let ((state (try! acc)))
+		(if (is-eq (get remaining state) u0)
+			acc
+			(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state))))
+					(feed (get feed parsed))
+					;; Cursor advanced and this feed counted; returned unchanged when the feed
+					;; is missing a required field (parsed past, but not appended)
+					(advanced (merge state {
+						offset: (get offset parsed),
+						remaining: (- (get remaining state) u1)
+					}))
+					(price (unwrap! (get price feed) (ok advanced)))
+					(exponent (unwrap! (get exponent feed) (ok advanced)))
+					(publisher-count (unwrap! (get publisher-count feed) (ok advanced))))
+				(ok (merge advanced {
+					;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
+					feeds: (unwrap! (as-max-len? (append (get feeds advanced) (merge feed {
+						price: price,
+						exponent: exponent,
+						publisher-count: publisher-count
+					})) u16) ERR_TOO_MANY_FEEDS)
+				}))))))
 
 ;; Parse one feed
 ;; Returns the feed plus the offset just past it
