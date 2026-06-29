@@ -288,16 +288,21 @@
 
 ;;;; Trusted-signer check (Phase 1)
 
-;; True if `signer` matches a governance-listed trusted signer that has not expired
+;; True if `signer` matches a non-expired trusted signer (based on wall-clock time from previous block)
 (define-private (is-signer-trusted (signer (buff 33)))
-	(let ((now (default-to u0 (get-stacks-block-info? time (- stacks-block-height u1)))))
-		(get trusted (fold check-trusted-signer
+	(is-signer-trusted-at signer (get-stacks-block-info? time (- stacks-block-height u1))))
+
+;; Split from `is-signer-trusted` for unit testing
+(define-private (is-signer-trusted-at (signer (buff 33)) (now-opt (optional uint)))
+	(match now-opt
+		now (get trusted (fold check-trusted-signer
 			(contract-call? .pyth-lazer-governance get-trusted-signers)
 			{
 				target: signer,
 				now: now,
 				trusted: false
-			}))))
+			}))
+		false))
 
 (define-private (check-trusted-signer
 		(entry {
