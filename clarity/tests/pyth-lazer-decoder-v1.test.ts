@@ -110,3 +110,37 @@ describe("pyth-lazer-decoder-v1: verify-update (trusted-signer check)", () => {
     expect(result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 });
+
+describe("pyth-lazer-decoder-v1: trusted-signer check fails closed without block time", () => {
+  // `is-signer-trusted` reads wall-clock time from `(get-stacks-block-info? time (- height u1))`,
+  // which is always readable on a live chain past genesis (and in simnet) -- so the unreadable
+  // case can't be reached through the public entry points. `is-signer-trusted-at` takes the time
+  // source as an `(optional uint)` precisely so the `none` (unreadable) branch is testable here.
+  const trustedNow = Cl.some(Cl.uint(1_000n));
+  const unreadableTime = Cl.none();
+
+  const isTrustedAt = (now: ReturnType<typeof Cl.some> | ReturnType<typeof Cl.none>) =>
+    simnet.callPrivateFn(
+      DECODER,
+      "is-signer-trusted-at",
+      [Cl.buffer(TEST_PUBKEY), now],
+      deployer,
+    ).result;
+
+  it("trusts nobody when block time is unreadable, even a configured non-expired signer", () => {
+    trust(TEST_PUBKEY, FAR_FUTURE); // signer is trusted and never expires
+    // With a readable clock this signer is trusted; with an unreadable clock it must NOT be.
+    expect(isTrustedAt(trustedNow)).toBeBool(true);
+    expect(isTrustedAt(unreadableTime)).toBeBool(false);
+  });
+
+  it("still rejects an expired signer when block time is readable", () => {
+    trust(TEST_PUBKEY, 500n); // expires-at = 500, before now = 1000
+    expect(isTrustedAt(trustedNow)).toBeBool(false);
+  });
+
+  it("trusts nobody when block time is unreadable even if no signers are configured", () => {
+    // (no trust() call -> empty signer set) -- the none branch short-circuits before the fold
+    expect(isTrustedAt(unreadableTime)).toBeBool(false);
+  });
+});
