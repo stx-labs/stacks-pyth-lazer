@@ -149,8 +149,9 @@
 				feed-update-timestamp: (optional uint)
 			})
 		} uint)))
-	(let ((state (try! acc)))
-		(if (is-eq (get remaining state) u0)
+	(let ((state (try! acc))
+			(remaining (get remaining state)))
+		(if (is-eq remaining u0)
 			acc
 			(let ((parsed (try! (parse-one-feed (get bytes state) (get offset state))))
 					(feed (get feed parsed))
@@ -158,7 +159,7 @@
 					;; is missing a required field (parsed past, but not appended)
 					(advanced (merge state {
 						offset: (get offset parsed),
-						remaining: (- (get remaining state) u1)
+						remaining: (- remaining u1)
 					}))
 					(price (unwrap! (get price feed) (ok advanced)))
 					(exponent (unwrap! (get exponent feed) (ok advanced)))
@@ -186,8 +187,8 @@
 					exponent: none,
 					confidence: none,
 					publisher-count: none,
-					best-bid: none, best-ask:
-					none
+					best-bid: none,
+					best-ask: none
 				})))))
 		;; Every declared property must have been consumed
 		(asserts! (is-eq (get remaining parsed) u0) ERR_TOO_MANY_PROPS)
