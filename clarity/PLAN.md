@@ -178,7 +178,7 @@ a separable pause key. This supersedes decision #1 below; see §6a.
 | Recover signer from sig | `secp256k1-recover?` (returns compressed key) | ✅ same pattern as `wormhole-core-v4` |
 | Compare recovered ↔ trusted key | buffer `is-eq` | ✅ trivial |
 | Byte parsing (uint8/16/32/64, int16/32/64, buff slices) | `slice?`, `buff-to-uint-be`, `buff-to-int-be`, `bit-shift-*` | ✅ port helpers from decoder/governance verbatim |
-| Staleness vs wall clock | `get-stacks-block-info? time` (seconds) | ✅ pattern from `pyth-storage-v4` (must convert µs→s) |
+| Staleness vs wall clock | `stacks-block-time` (current block, seconds) | ✅ pattern from `pyth-storage-v4` (must convert µs→s) |
 | ed25519 (Lazer `solana` fmt) | ❌ not in Clarity 5 (Clarity 6: `ed25519-verify`) | n/a — v1 uses the `evm`/secp256k1 format |
 
 **Conclusion: fully feasible with native Clarity 5, no new cryptography.** The hard part is
