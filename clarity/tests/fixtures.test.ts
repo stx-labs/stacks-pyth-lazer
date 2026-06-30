@@ -192,9 +192,8 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
   return update;
 }
 
-// PROP name -> decoder output field + signedness. These are the six properties the v1
-// subscription carries; the decoder fails closed on any other type, so a pass fixture must
-// use only these -- a property outside this set belongs in a generated/fail fixture.
+// PROP name -> decoder output field. The runner models only these six, so a pass fixture must
+// use only them; market-session/ema-* are parsed too (unit-tested), existence-byte types rejected.
 const PROP_OUT: Record<string, { field: string; kind: "int" | "uint" }> = {
   Price: { field: "price", kind: "int" },
   Exponent: { field: "exponent", kind: "int" },

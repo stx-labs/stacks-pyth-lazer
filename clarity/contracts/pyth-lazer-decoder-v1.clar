@@ -38,17 +38,17 @@
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property types the v1 Lazer subscription carries -- the only ones this decoder reads.
-;; Any other type (Lazer defines 6..12, plus anything higher) is rejected, not skipped:
-;; their widths vary (funding/timestamp types carry a variable-length existence byte and
-;; MarketSession is 2 bytes), so a fixed-width skip would mis-align the cursor. A
-;; subscription or format change is handled by deploying a new decoder version.
-(define-constant PROP_PRICE u0)            ;; int64
-(define-constant PROP_BEST_BID u1)         ;; int64
-(define-constant PROP_BEST_ASK u2)         ;; int64
-(define-constant PROP_PUBLISHER_COUNT u3)  ;; uint16
-(define-constant PROP_EXPONENT u4)         ;; int16
-(define-constant PROP_CONFIDENCE u5)       ;; uint64
+;; Property types this decoder parses (the fixed-width Lazer types). The variable-length
+;; existence-byte types (6/7/8/12) and anything above 12 are rejected -- see set-property-field.
+(define-constant PROP_PRICE u0)             ;; int64
+(define-constant PROP_BEST_BID u1)          ;; int64
+(define-constant PROP_BEST_ASK u2)          ;; int64
+(define-constant PROP_PUBLISHER_COUNT u3)   ;; uint16
+(define-constant PROP_EXPONENT u4)          ;; int16
+(define-constant PROP_CONFIDENCE u5)        ;; uint64
+(define-constant PROP_MARKET_SESSION u9)    ;; int16, value 0-4
+(define-constant PROP_EMA_PRICE u10)        ;; int64
+(define-constant PROP_EMA_CONFIDENCE u11)   ;; uint64
 
 ;; Max feeds parsed per update. Must match size of `FEED_SLOTS`
 (define-constant MAX_FEEDS u16)
@@ -69,6 +69,7 @@
 (define-constant ERR_PAYLOAD_OVERLAY (err u2204))
 (define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; Property type the v1 decoder does not handle
 (define-constant ERR_TOO_MANY_PROPS (err u2206))    ;; Feed declares more properties than exist
+(define-constant ERR_INVALID_MARKET_SESSION (err u2207)) ;; market-session value outside 0-4
 
 ;;;; Read-only functions
 
@@ -193,7 +194,10 @@
 					confidence: none,
 					publisher-count: none,
 					best-bid: none,
-					best-ask: none
+					best-ask: none,
+					market-session: none,
+					ema-price: none,
+					ema-confidence: none
 				})))))
 		;; Every declared property must have been consumed
 		(asserts! (is-eq (get remaining parsed) u0) ERR_TOO_MANY_PROPS)
@@ -206,14 +210,13 @@
 				publisher-count: (get publisher-count parsed),
 				best-bid: (get best-bid parsed),
 				best-ask: (get best-ask parsed),
-				;; Reserved fields the v1 subscription does not carry; a later decoder can
-				;; populate them (the storage schema and decoder-trait already hold the slots)
+				market-session: (get market-session parsed),
+				ema-price: (get ema-price parsed),
+				ema-confidence: (get ema-confidence parsed),
+				;; Variable-length types this decoder does not parse (see set-property-field)
 				funding-rate: none,
 				funding-timestamp: none,
 				funding-rate-interval: none,
-				market-session: none,
-				ema-price: none,
-				ema-confidence: none,
 				feed-update-timestamp: none
 			},
 			offset: (get offset parsed)
@@ -232,7 +235,10 @@
 			confidence: (optional uint),
 			publisher-count: (optional uint),
 			best-bid: (optional int),
-			best-ask: (optional int)
+			best-ask: (optional int),
+			market-session: (optional uint),
+			ema-price: (optional int),
+			ema-confidence: (optional uint)
 		} uint)))
 	(match acc
 		state
@@ -253,13 +259,9 @@
 (define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
 (define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
 
-;; Read one property's value, store it, and advance the cursor past the value. Each branch
-;; reads its own width, so the width lives with the read -- there is no separate width table to
-;; drift out of sync. Any property outside the v1 subscription falls through to the final
-;; branch and is rejected (see PROP_* notes): the funding/timestamp types carry a
-;; variable-length existence byte and MarketSession is 2 bytes, so a fixed-width skip would
-;; mis-align the cursor and silently corrupt later properties.
-;; Errors on a short read; maps a 0 value to `none` (see some-if-nonzero-*).
+;; Read one property's value, store it, and advance the cursor past it. Handles the fixed-width
+;; types (0-5, 9-11); variable-length and unknown types fall through to the reject branch.
+;; Errors on a short read; a 0 value maps to `none` (see some-if-nonzero-*).
 (define-private (set-property-field
 		(ptype uint)
 		(bytes (buff 8192))
@@ -273,7 +275,10 @@
 			confidence: (optional uint),
 			publisher-count: (optional uint),
 			best-bid: (optional int),
-			best-ask: (optional int)
+			best-ask: (optional int),
+			market-session: (optional uint),
+			ema-price: (optional int),
+			ema-confidence: (optional uint)
 		}))
 	(if (is-eq ptype PROP_PRICE)
 		(ok (merge state {
@@ -299,8 +304,22 @@
 							(ok (merge state {
 								confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
 								offset: (+ voffset u8) }))
-							;; Property the v1 subscription does not carry -> fail closed
-							ERR_UNKNOWN_PROPERTY)))))))
+							(if (is-eq ptype PROP_MARKET_SESSION)
+								;; 2-byte field bounded to 0-4; read unsigned so a negative int16 (> u4) also rejects
+								(let ((session (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)))
+									(asserts! (<= session u4) ERR_INVALID_MARKET_SESSION)
+									(ok (merge state { market-session: (some session), offset: (+ voffset u2) })))
+								(if (is-eq ptype PROP_EMA_PRICE)
+									(ok (merge state {
+										ema-price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+										offset: (+ voffset u8) }))
+									(if (is-eq ptype PROP_EMA_CONFIDENCE)
+										(ok (merge state {
+											ema-confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+											offset: (+ voffset u8) }))
+										;; Fail closed: 6/7/8/12 use a variable-length existence byte (1-byte flag +
+										;; 8 bytes only when set), so a fixed-width read can't handle them; > 12 is not a type.
+										ERR_UNKNOWN_PROPERTY))))))))))
 
 ;;;; Trusted-signer check (Phase 1)
 

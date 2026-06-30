@@ -25,13 +25,10 @@
 ;;     optional; the ORACLE skips a price-less feed (partial success) rather than
 ;;     rejecting the batch. `publish-time` (update timestamp, microseconds) and
 ;;     `channel` are supplied by the oracle; channel is recorded, not enforced.
-;;   - OPTIONAL `confidence` / `best-bid` / `best-ask`, then the reserved tail
-;;     `funding-rate` / `funding-timestamp` / `funding-rate-interval` /
-;;     `market-session` / `ema-*` / `feed-update-timestamp`. The v1 decoder fills the
-;;     first three; the rest cover the remaining AggregatedPriceFeedData properties and
-;;     are reserved `none` so a later decoder can populate them without reshaping this
-;;     IMMUTABLE schema. (`market-session` is non-optional upstream but kept optional
-;;     here so a decoder that does not parse it can still satisfy the schema.)
+;;   - OPTIONAL `confidence` / `best-bid` / `best-ask` / `market-session` / `ema-*`, parsed by
+;;     the v1 decoder, plus `funding-*` / `feed-update-timestamp`, reserved `none` for a later
+;;     decoder -- together the full AggregatedPriceFeedData set, without reshaping this IMMUTABLE
+;;     schema. (`market-session` is non-optional upstream, kept optional here.)
 (define-map prices uint {
 	price: int,
 	exponent: int,

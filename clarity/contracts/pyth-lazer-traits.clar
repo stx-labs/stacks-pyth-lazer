@@ -17,11 +17,8 @@
 				confidence: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
-				;; Reserved tail (funding-* / market-session / ema-* / feed-update-timestamp):
-				;; the full Lazer AggregatedPriceFeedData property set. The v1 decoder returns
-				;; `none` for all of these; a later decoder can populate any without changing
-				;; this immutable trait. (market-session is non-optional upstream, kept optional
-				;; here so a decoder that does not parse it still satisfies the trait.)
+				;; Full Lazer property set. The v1 decoder leaves funding-* and feed-update-timestamp
+				;; `none` (not parsed); a later decoder can fill them without changing this trait.
 				funding-rate: (optional int),
 				funding-timestamp: (optional uint),
 				funding-rate-interval: (optional uint),
