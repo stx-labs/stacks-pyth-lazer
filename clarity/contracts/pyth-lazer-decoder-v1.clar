@@ -240,18 +240,16 @@
 			ema-price: (optional int),
 			ema-confidence: (optional uint)
 		} uint)))
-	(match acc
-		state
+	(let ((state (try! acc))
+			(remaining (get remaining state)))
+		(if (is-eq remaining u0)
+			acc
 			;; bytes/off are bound only in the active branch, so no-op tail iterations stay cheap
-			(let ((remaining (get remaining state)))
-				(if (is-eq remaining u0)
-					acc
-					(let ((bytes (get bytes state))
-							(off (get offset state))
-							(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA))
-							(stored (try! (set-property-field ptype bytes (+ off u1) state))))
-						(ok (merge stored { remaining: (- remaining u1) })))))
-		e (err e)))
+			(let ((bytes (get bytes state))
+					(off (get offset state))
+					(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA))
+					(stored (try! (set-property-field ptype bytes (+ off u1) state))))
+				(ok (merge stored { remaining: (- remaining u1) }))))))
 
 ;; Lazer's evm encoding has no Option type: A missing optional is encoded as 0, so the
 ;; reference PythLazerLib treats a parsed 0 (price/bid/ask/confidence/publisher-count) as
