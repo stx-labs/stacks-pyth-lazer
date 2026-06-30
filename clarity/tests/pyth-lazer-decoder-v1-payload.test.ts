@@ -161,6 +161,17 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, null, { ms: 0n, ema: null })]));
   });
 
+  it("accepts market-session at the upper boundary (4)", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.MarketSession, 4n], [PROP.Exponent, -3n], [PROP.PublisherCount, 1n]] }],
+    });
+    // 4 is the inclusive upper bound; pairs with the >4 reject test to pin the boundary.
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, null, { ms: 4n })]));
+  });
+
   it("rejects a market-session value outside 0-4", () => {
     trust();
     const payload = buildLazerPayload({
