@@ -38,8 +38,10 @@
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property types this decoder parses (the fixed-width Lazer types). The variable-length
-;; existence-byte types (6/7/8/12) and anything above 12 are rejected -- see set-property-field.
+;; Property types this decoder parses (the fixed-width Lazer types).
+;; Not supported:
+;;  - Variable-length types (6/7/8/12)
+;;  - Properties > 12
 (define-constant PROP_PRICE u0)             ;; int64
 (define-constant PROP_BEST_BID u1)          ;; int64
 (define-constant PROP_BEST_ASK u2)          ;; int64
@@ -222,8 +224,8 @@
 			offset: (get offset parsed)
 		})))
 
-;; Inner fold step: read the next property's type byte, then store its value and advance the
-;; cursor past it (set-property-field), or reject any type the v1 decoder does not handle.
+;; Inner fold step: Read the next property and advance cursor
+;; Fail on unrecognized/unsupported properties
 (define-private (parse-property
 		(slot_ uint)
 		(acc (response {
@@ -257,9 +259,9 @@
 (define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
 (define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
 
-;; Read one property's value, store it, and advance the cursor past it. Handles the fixed-width
-;; types (0-5, 9-11); variable-length and unknown types fall through to the reject branch.
-;; Errors on a short read; a 0 value maps to `none` (see some-if-nonzero-*).
+;; Read one property and advance cursor past it
+;; Handles all types declared as `PROP_*` constants, errors on unsupported properties
+;; Maps 0 -> `none` for some fields
 (define-private (set-property-field
 		(ptype uint)
 		(bytes (buff 8192))
@@ -315,8 +317,7 @@
 										(ok (merge state {
 											ema-confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
 											offset: (+ voffset u8) }))
-										;; Fail closed: 6/7/8/12 use a variable-length existence byte (1-byte flag +
-										;; 8 bytes only when set), so a fixed-width read can't handle them; > 12 is not a type.
+										;; Property type either invalid or unsupported
 										ERR_UNKNOWN_PROPERTY))))))))))
 
 ;;;; Trusted-signer check (Phase 1)
