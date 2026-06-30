@@ -11,8 +11,6 @@
 (define-constant ERR_PRICE_FEED_NOT_FOUND (err u3003))
 ;; Stored price is older than the governance staleness window
 (define-constant ERR_STALE_PRICE (err u3004))
-;; Could not read wall-clock time from the chain
-(define-constant ERR_NO_BLOCK_TIME (err u3005))
 
 ;; Lazer publish-time is microseconds; staleness compares in seconds
 (define-constant MICROS_PER_SECOND u1000000)
@@ -58,11 +56,11 @@
 (define-read-only (read-price-with-staleness-check (feed-id uint))
 	(let ((entry (unwrap! (map-get? prices feed-id) ERR_PRICE_FEED_NOT_FOUND))
 			(threshold (contract-call? .pyth-lazer-governance get-stale-price-threshold))
-			(now (unwrap! (get-stacks-block-info? time (- stacks-block-height u1)) ERR_NO_BLOCK_TIME))
+			(now stacks-block-time)
 			(publish-time-seconds (/ (get publish-time entry) MICROS_PER_SECOND)))
 		;; Fresh while `now - publish-time-seconds <= threshold`, rearranged to
-		;; `publish + threshold >= now` so a publish-time ahead of block time (Lazer and
-		;; Stacks keep independent clocks) reads as fresh rather than underflowing the uint
+		;; `publish + threshold >= now` because a Lazer publish-time can run ahead of the current
+		;; Stacks block time (independent clocks), where `now - publish` would underflow the uint
 		(asserts! (>= (+ publish-time-seconds threshold) now) ERR_STALE_PRICE)
 		(ok entry)))
 
