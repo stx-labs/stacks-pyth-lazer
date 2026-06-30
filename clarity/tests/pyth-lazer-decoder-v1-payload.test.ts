@@ -113,15 +113,16 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     );
   });
 
-  it("skips a property it does not persist (ema), parsing the rest", () => {
+  it("rejects a feed carrying a Lazer property outside the v1 subscription (ema)", () => {
     trust();
     const payload = buildLazerPayload({
       timestamp: TS,
       channel: REAL_TIME,
       feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.EmaPrice, 999n], [PROP.Exponent, -3n], [PROP.Confidence, 2n], [PROP.PublisherCount, 1n]] }],
     });
-    // EmaPrice is advanced-over (its width is honored) and left `none`; the rest parse.
-    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, 2n)]));
+    // EmaPrice (type 10) is a valid Lazer property but not in the v1 set, so the decoder
+    // fails closed rather than guessing its width and risking a mis-aligned cursor.
+    expect(decode(payload)).toBeErr(Cl.uint(ERR_UNKNOWN_PROPERTY));
   });
 
   it("drops a feed missing a required field, keeping the complete ones", () => {

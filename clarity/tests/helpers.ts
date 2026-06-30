@@ -66,6 +66,11 @@ export const PROP = {
   FeedUpdateTimestamp: 12,
 } as const;
 
+// Value width per property type. Types 0-5 are the v1 subscription set and match the
+// on-chain decoder. Types 6-12 are only emitted by generated/fail fixtures -- the decoder
+// rejects them at the type byte, so their value bytes are never read and these widths are
+// arbitrary filler (NOT the real Lazer widths, which carry an existence byte for the
+// funding/timestamp types and are 2 bytes for MarketSession).
 const PROP_WIDTH: Record<number, number> = {
   0: 8, 1: 8, 2: 8, 3: 2, 4: 2, 5: 8, 6: 8, 7: 8, 8: 8, 9: 1, 10: 8, 11: 8, 12: 8,
 };

@@ -184,8 +184,9 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
   return update;
 }
 
-// PROP name -> decoder output field + signedness. Props not listed here (e.g.
-// EmaPrice) are advanced-over by the parser and never appear in the output.
+// PROP name -> decoder output field + signedness. These are the six properties the v1
+// subscription carries; the decoder fails closed on any other type, so a pass fixture must
+// use only these -- a property outside this set belongs in a generated/fail fixture.
 const PROP_OUT: Record<string, { field: string; kind: "int" | "uint" }> = {
   Price: { field: "price", kind: "int" },
   Exponent: { field: "exponent", kind: "int" },

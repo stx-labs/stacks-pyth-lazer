@@ -38,16 +38,17 @@
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property type tags the decoder recognizes
-;; Other valid types are skipped
-;; `ema-*` and `feed-update-timestamp` are not in the v1 subscription, so they are left `none`
+;; Property types the v1 Lazer subscription carries -- the only ones this decoder reads.
+;; Any other type (Lazer defines 6..12, plus anything higher) is rejected, not skipped:
+;; their widths vary (funding/timestamp types carry a variable-length existence byte and
+;; MarketSession is 2 bytes), so a fixed-width skip would mis-align the cursor. A
+;; subscription or format change is handled by deploying a new decoder version.
 (define-constant PROP_PRICE u0)            ;; int64
 (define-constant PROP_BEST_BID u1)         ;; int64
 (define-constant PROP_BEST_ASK u2)         ;; int64
 (define-constant PROP_PUBLISHER_COUNT u3)  ;; uint16
 (define-constant PROP_EXPONENT u4)         ;; int16
 (define-constant PROP_CONFIDENCE u5)       ;; uint64
-(define-constant MAX_PROPERTY_TYPE u12)
 
 ;; Max feeds parsed per update. Must match size of `FEED_SLOTS`
 (define-constant MAX_FEEDS u16)
@@ -66,7 +67,7 @@
 (define-constant ERR_TOO_MANY_FEEDS (err u2202))
 (define-constant ERR_INVALID_FEED_DATA (err u2203)) ;; Truncated / short read while parsing a feed
 (define-constant ERR_PAYLOAD_OVERLAY (err u2204))
-(define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; Property type > MAX_PROPERTY_TYPE
+(define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; Property type the v1 decoder does not handle
 (define-constant ERR_TOO_MANY_PROPS (err u2206))    ;; Feed declares more properties than exist
 
 ;;;; Read-only functions
@@ -209,7 +210,8 @@
 			offset: (get offset parsed)
 		})))
 
-;; Inner fold step: Read the next property's type, save it if recognized, and advance cursor
+;; Inner fold step: read the next property's type byte, then store its value and advance the
+;; cursor past it (set-property-field), or reject any type the v1 decoder does not handle.
 (define-private (parse-property
 		(slot_ uint)
 		(acc (response {
@@ -231,13 +233,9 @@
 					acc
 					(let ((bytes (get bytes state))
 							(off (get offset state))
-							(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA)))
-						(asserts! (<= ptype MAX_PROPERTY_TYPE) ERR_UNKNOWN_PROPERTY)
-						(let ((advanced (try! (set-property-field ptype bytes (+ off u1) state))))
-							(ok (merge advanced {
-								offset: (+ off u1 (property-width ptype)),
-								remaining: (- remaining u1)
-							}))))))
+							(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA))
+							(stored (try! (set-property-field ptype bytes (+ off u1) state))))
+						(ok (merge stored { remaining: (- remaining u1) })))))
 		e (err e)))
 
 ;; Lazer's evm encoding has no Option type: A missing optional is encoded as 0, so the
@@ -246,9 +244,13 @@
 (define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
 (define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
 
-;; Extract a property's value into the state
-;; Errors on a short read
-;; Maps `0` -> `none` as described above
+;; Read one property's value, store it, and advance the cursor past the value. Each branch
+;; reads its own width, so the width lives with the read -- there is no separate width table to
+;; drift out of sync. Any property outside the v1 subscription falls through to the final
+;; branch and is rejected (see PROP_* notes): the funding/timestamp types carry a
+;; variable-length existence byte and MarketSession is 2 bytes, so a fixed-width skip would
+;; mis-align the cursor and silently corrupt later properties.
+;; Errors on a short read; maps a 0 value to `none` (see some-if-nonzero-*).
 (define-private (set-property-field
 		(ptype uint)
 		(bytes (buff 8192))
@@ -265,26 +267,31 @@
 			best-ask: (optional int)
 		}))
 	(if (is-eq ptype PROP_PRICE)
-		(ok (merge state { price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+		(ok (merge state {
+			price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+			offset: (+ voffset u8) }))
 		(if (is-eq ptype PROP_BEST_BID)
-			(ok (merge state { best-bid: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+			(ok (merge state {
+				best-bid: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+				offset: (+ voffset u8) }))
 			(if (is-eq ptype PROP_BEST_ASK)
-				(ok (merge state { best-ask: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+				(ok (merge state {
+					best-ask: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+					offset: (+ voffset u8) }))
 				(if (is-eq ptype PROP_PUBLISHER_COUNT)
-					(ok (merge state { publisher-count: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
+					(ok (merge state {
+						publisher-count: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)),
+						offset: (+ voffset u2) }))
 					(if (is-eq ptype PROP_EXPONENT)
-						(ok (merge state { exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
+						(ok (merge state {
+							exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)),
+							offset: (+ voffset u2) }))
 						(if (is-eq ptype PROP_CONFIDENCE)
-							(ok (merge state { confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
-							(ok state))))))))
-
-;; Value width (bytes) per property type:
-;;   - PublisherCount(u16)/Exponent(i16) -> 2
-;;   - MarketSession(u8) -> 1
-;;   - Everything else (i64/u64) -> 8
-(define-private (property-width (ptype uint))
-	(if (or (is-eq ptype u3) (is-eq ptype u4)) u2
-		(if (is-eq ptype u9) u1 u8)))
+							(ok (merge state {
+								confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+								offset: (+ voffset u8) }))
+							;; Property the v1 subscription does not carry -> fail closed
+							ERR_UNKNOWN_PROPERTY)))))))
 
 ;;;; Trusted-signer check (Phase 1)
 

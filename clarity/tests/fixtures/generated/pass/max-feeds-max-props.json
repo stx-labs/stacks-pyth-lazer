@@ -1,5 +1,5 @@
 {
-  "description": "stress: 16 feeds (MAX_FEEDS) each declaring all 13 property types (max props) -- the largest update the parser accepts, exercising the nested feed/property folds at full scale and exact end-of-payload accounting",
+  "description": "stress: 16 feeds (MAX_FEEDS) each carrying all six supported properties (the v1 subscription set) -- the largest update the parser accepts, exercising the nested feed/property folds at scale and exact end-of-payload accounting",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [
@@ -29,34 +29,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -86,34 +58,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -143,34 +87,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -200,34 +116,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -257,34 +145,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -314,34 +174,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -371,34 +203,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -428,34 +232,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -485,34 +261,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -542,34 +290,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -599,34 +319,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -656,34 +348,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -713,34 +377,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -770,34 +406,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -827,34 +435,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     },
@@ -884,34 +464,6 @@
         [
           "Confidence",
           "1500000"
-        ],
-        [
-          "FundingRate",
-          "-12345"
-        ],
-        [
-          "FundingTimestamp",
-          "1700000000"
-        ],
-        [
-          "FundingRateInterval",
-          "28800"
-        ],
-        [
-          "MarketSession",
-          "2"
-        ],
-        [
-          "EmaPrice",
-          "4200005000"
-        ],
-        [
-          "EmaConfidence",
-          "1400000"
-        ],
-        [
-          "FeedUpdateTimestamp",
-          "1700000000000000"
         ]
       ]
     }
