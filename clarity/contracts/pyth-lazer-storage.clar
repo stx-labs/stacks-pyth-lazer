@@ -25,10 +25,13 @@
 ;;     optional; the ORACLE skips a price-less feed (partial success) rather than
 ;;     rejecting the batch. `publish-time` (update timestamp, microseconds) and
 ;;     `channel` are supplied by the oracle; channel is recorded, not enforced.
-;;   - OPTIONAL `confidence` / `best-bid` / `best-ask` / `ema-*` /
-;;     `feed-update-timestamp`. The v1 decoder fills the first three; the rest are
-;;     reserved `none` so a later decoder can populate them without reshaping this
-;;     IMMUTABLE schema.
+;;   - OPTIONAL `confidence` / `best-bid` / `best-ask`, then the reserved tail
+;;     `funding-rate` / `funding-timestamp` / `funding-rate-interval` /
+;;     `market-session` / `ema-*` / `feed-update-timestamp`. The v1 decoder fills the
+;;     first three; the rest cover the remaining AggregatedPriceFeedData properties and
+;;     are reserved `none` so a later decoder can populate them without reshaping this
+;;     IMMUTABLE schema. (`market-session` is non-optional upstream but kept optional
+;;     here so a decoder that does not parse it can still satisfy the schema.)
 (define-map prices uint {
 	price: int,
 	exponent: int,
@@ -36,6 +39,10 @@
 	confidence: (optional uint),
 	best-bid: (optional int),
 	best-ask: (optional int),
+	funding-rate: (optional int),
+	funding-timestamp: (optional uint),
+	funding-rate-interval: (optional uint),
+	market-session: (optional uint),
 	ema-price: (optional int),
 	ema-confidence: (optional uint),
 	feed-update-timestamp: (optional uint),
@@ -80,6 +87,10 @@
 			confidence: (optional uint),
 			best-bid: (optional int),
 			best-ask: (optional int),
+			funding-rate: (optional int),
+			funding-timestamp: (optional uint),
+			funding-rate-interval: (optional uint),
+			market-session: (optional uint),
 			ema-price: (optional int),
 			ema-confidence: (optional uint),
 			feed-update-timestamp: (optional uint),
@@ -103,6 +114,10 @@
 				confidence: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
+				funding-rate: (optional int),
+				funding-timestamp: (optional uint),
+				funding-rate-interval: (optional uint),
+				market-session: (optional uint),
 				ema-price: (optional int),
 				ema-confidence: (optional uint),
 				feed-update-timestamp: (optional uint),

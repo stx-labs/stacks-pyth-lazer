@@ -145,6 +145,10 @@
 				publisher-count: uint,
 				best-bid: (optional int),
 				best-ask: (optional int),
+				funding-rate: (optional int),
+				funding-timestamp: (optional uint),
+				funding-rate-interval: (optional uint),
+				market-session: (optional uint),
 				ema-price: (optional int),
 				ema-confidence: (optional uint),
 				feed-update-timestamp: (optional uint)
@@ -202,7 +206,12 @@
 				publisher-count: (get publisher-count parsed),
 				best-bid: (get best-bid parsed),
 				best-ask: (get best-ask parsed),
-				;; Reserved fields the v1 subscription does not carry
+				;; Reserved fields the v1 subscription does not carry; a later decoder can
+				;; populate them (the storage schema and decoder-trait already hold the slots)
+				funding-rate: none,
+				funding-timestamp: none,
+				funding-rate-interval: none,
+				market-session: none,
 				ema-price: none,
 				ema-confidence: none,
 				feed-update-timestamp: none

@@ -34,8 +34,9 @@ const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
 // Expected decoded per-feed tuple (full v1 shape). price/exponent/publisher-count are
-// required (the decoder drops feeds missing them); ema-* and feed-update-timestamp are
-// never produced by the v1 decoder, so they are always `none`.
+// required (the decoder drops feeds missing them); the reserved tail (funding-*,
+// market-session, ema-*, feed-update-timestamp) is never produced by the v1 decoder, so
+// it is always `none`.
 const feedRecord = (
   id: number,
   price: bigint,
@@ -53,6 +54,10 @@ const feedRecord = (
     "publisher-count": Cl.uint(pub),
     "best-bid": optInt(bid),
     "best-ask": optInt(ask),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),
