@@ -99,6 +99,10 @@ const capturedFeed = (f: any) =>
     "publisher-count": Cl.uint(BigInt(f.publisherCount)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),
@@ -120,6 +124,10 @@ const capturedStored = (f: any, c: any) =>
     confidence: optUint(big(f.confidence)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),
@@ -184,8 +192,8 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
   return update;
 }
 
-// PROP name -> decoder output field + signedness. Props not listed here (e.g.
-// EmaPrice) are advanced-over by the parser and never appear in the output.
+// PROP name -> decoder output field. The runner models only these six, so a pass fixture must
+// use only them; market-session/ema-* are parsed too (unit-tested), existence-byte types rejected.
 const PROP_OUT: Record<string, { field: string; kind: "int" | "uint" }> = {
   Price: { field: "price", kind: "int" },
   Exponent: { field: "exponent", kind: "int" },
@@ -218,6 +226,10 @@ function expectedFeedFromSpec(f: any) {
     confidence: present.has("confidence") ? Cl.some(Cl.uint(present.get("confidence")!)) : Cl.none(),
     "best-bid": optI("best-bid"),
     "best-ask": optI("best-ask"),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),

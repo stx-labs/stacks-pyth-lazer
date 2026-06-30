@@ -19,6 +19,7 @@ const ERR_INVALID_FEED_DATA = 2203; // truncated / short read
 const ERR_PAYLOAD_OVERLAY = 2204;
 const ERR_UNKNOWN_PROPERTY = 2205;
 const ERR_TOO_MANY_PROPS = 2206;
+const ERR_INVALID_MARKET_SESSION = 2207;
 
 function trust() {
   simnet.callPublicFn(
@@ -38,16 +39,22 @@ function decode(payload: Uint8Array) {
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
-// The decoded per-feed shape. price/exponent/publisher-count are required (the decoder
-// drops feeds missing them); confidence/best-bid/best-ask are populated when present;
-// ema-* and feed-update-timestamp are always `none` (the v1 decoder does not persist them).
+// The decoded per-feed shape. price/exponent/publisher-count are required (the decoder drops
+// feeds missing them); confidence/best-bid/best-ask/market-session/ema-* are populated when
+// present; funding-* and feed-update-timestamp are always `none` (not parsed).
 const feedRecord = (
   id: number,
   price: bigint,
   expo: bigint,
   pub: bigint,
   conf: bigint | null = null,
-  extra: { bid?: bigint | null; ask?: bigint | null } = {},
+  extra: {
+    bid?: bigint | null;
+    ask?: bigint | null;
+    ms?: bigint | null;
+    ema?: bigint | null;
+    emaConf?: bigint | null;
+  } = {},
 ) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
@@ -57,8 +64,12 @@ const feedRecord = (
     "publisher-count": Cl.uint(pub),
     "best-bid": optInt(extra.bid ?? null),
     "best-ask": optInt(extra.ask ?? null),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": optUint(extra.ms ?? null),
+    "ema-price": optInt(extra.ema ?? null),
+    "ema-confidence": optUint(extra.emaConf ?? null),
     "feed-update-timestamp": Cl.none(),
   });
 
@@ -113,15 +124,73 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     );
   });
 
-  it("skips a property it does not persist (ema), parsing the rest", () => {
+  it("decodes the fixed-width extended properties (market-session, ema-price, ema-confidence)", () => {
     trust();
     const payload = buildLazerPayload({
       timestamp: TS,
       channel: REAL_TIME,
-      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.EmaPrice, 999n], [PROP.Exponent, -3n], [PROP.Confidence, 2n], [PROP.PublisherCount, 1n]] }],
+      feeds: [{
+        id: 4,
+        props: [
+          [PROP.Price, 5n],
+          [PROP.MarketSession, 2n],
+          [PROP.Exponent, -3n],
+          [PROP.EmaPrice, 999n],
+          [PROP.Confidence, 2n],
+          [PROP.EmaConfidence, 888n],
+          [PROP.PublisherCount, 1n],
+        ],
+      }],
     });
-    // EmaPrice is advanced-over (its width is honored) and left `none`; the rest parse.
-    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, 2n)]));
+    expect(decode(payload)).toBeOk(
+      decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, 2n, { ms: 2n, ema: 999n, emaConf: 888n })]),
+    );
+  });
+
+  it("keeps market-session 0 (a real value) but collapses a 0 ema-price to none", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{
+        id: 4,
+        props: [[PROP.Price, 5n], [PROP.MarketSession, 0n], [PROP.Exponent, -3n], [PROP.EmaPrice, 0n], [PROP.PublisherCount, 1n]],
+      }],
+    });
+    // market-session 0 is a real value (always present); ema-price 0 is the missing sentinel -> none
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, null, { ms: 0n, ema: null })]));
+  });
+
+  it("accepts market-session at the upper boundary (4)", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.MarketSession, 4n], [PROP.Exponent, -3n], [PROP.PublisherCount, 1n]] }],
+    });
+    // 4 is the inclusive upper bound; pairs with the >4 reject test to pin the boundary.
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(4, 5n, -3n, 1n, null, { ms: 4n })]));
+  });
+
+  it("rejects a market-session value outside 0-4", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.MarketSession, 5n], [PROP.Exponent, -3n], [PROP.PublisherCount, 1n]] }],
+    });
+    expect(decode(payload)).toBeErr(Cl.uint(ERR_INVALID_MARKET_SESSION));
+  });
+
+  it("rejects a feed carrying a variable-length property the decoder does not parse (funding-rate)", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.FundingRate, 999n], [PROP.Exponent, -3n], [PROP.PublisherCount, 1n]] }],
+    });
+    // FundingRate (6) is an existence-byte type the decoder does not parse -> rejected.
+    expect(decode(payload)).toBeErr(Cl.uint(ERR_UNKNOWN_PROPERTY));
   });
 
   it("drops a feed missing a required field, keeping the complete ones", () => {

@@ -60,8 +60,9 @@ const getPrice = (feedId: number) =>
   simnet.callReadOnlyFn(STORAGE, "get-price", [Cl.uint(feedId)], deployer).result;
 
 // Expected stored record (finalized schema). The oracle requires
-// price/exponent/publisher-count and passes confidence through; best-bid/best-ask,
-// ema-*, and feed-update-timestamp are `none` for the updates these tests build.
+// price/exponent/publisher-count and passes confidence through; best-bid/best-ask and the
+// reserved tail (funding-*, market-session, ema-*, feed-update-timestamp) are `none` for
+// the updates these tests build.
 const storedRecord = (price: bigint, exponent: bigint, confidence: bigint, publisherCount: bigint) =>
   Cl.tuple({
     price: Cl.int(price),
@@ -70,6 +71,10 @@ const storedRecord = (price: bigint, exponent: bigint, confidence: bigint, publi
     confidence: Cl.some(Cl.uint(confidence)),
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),

@@ -38,16 +38,19 @@
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property type tags the decoder recognizes
-;; Other valid types are skipped
-;; `ema-*` and `feed-update-timestamp` are not in the v1 subscription, so they are left `none`
-(define-constant PROP_PRICE u0)            ;; int64
-(define-constant PROP_BEST_BID u1)         ;; int64
-(define-constant PROP_BEST_ASK u2)         ;; int64
-(define-constant PROP_PUBLISHER_COUNT u3)  ;; uint16
-(define-constant PROP_EXPONENT u4)         ;; int16
-(define-constant PROP_CONFIDENCE u5)       ;; uint64
-(define-constant MAX_PROPERTY_TYPE u12)
+;; Property types this decoder parses (the fixed-width Lazer types).
+;; Not supported:
+;;  - Variable-length types (6/7/8/12)
+;;  - Properties > 12
+(define-constant PROP_PRICE u0)             ;; int64
+(define-constant PROP_BEST_BID u1)          ;; int64
+(define-constant PROP_BEST_ASK u2)          ;; int64
+(define-constant PROP_PUBLISHER_COUNT u3)   ;; uint16
+(define-constant PROP_EXPONENT u4)          ;; int16
+(define-constant PROP_CONFIDENCE u5)        ;; uint64
+(define-constant PROP_MARKET_SESSION u9)    ;; int16, value 0-4
+(define-constant PROP_EMA_PRICE u10)        ;; int64
+(define-constant PROP_EMA_CONFIDENCE u11)   ;; uint64
 
 ;; Max feeds parsed per update. Must match size of `FEED_SLOTS`
 (define-constant MAX_FEEDS u16)
@@ -66,8 +69,9 @@
 (define-constant ERR_TOO_MANY_FEEDS (err u2202))
 (define-constant ERR_INVALID_FEED_DATA (err u2203)) ;; Truncated / short read while parsing a feed
 (define-constant ERR_PAYLOAD_OVERLAY (err u2204))
-(define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; Property type > MAX_PROPERTY_TYPE
+(define-constant ERR_UNKNOWN_PROPERTY (err u2205))  ;; Property type the v1 decoder does not handle
 (define-constant ERR_TOO_MANY_PROPS (err u2206))    ;; Feed declares more properties than exist
+(define-constant ERR_INVALID_MARKET_SESSION (err u2207)) ;; market-session value outside 0-4
 
 ;;;; Read-only functions
 
@@ -144,6 +148,10 @@
 				publisher-count: uint,
 				best-bid: (optional int),
 				best-ask: (optional int),
+				funding-rate: (optional int),
+				funding-timestamp: (optional uint),
+				funding-rate-interval: (optional uint),
+				market-session: (optional uint),
 				ema-price: (optional int),
 				ema-confidence: (optional uint),
 				feed-update-timestamp: (optional uint)
@@ -188,7 +196,10 @@
 					confidence: none,
 					publisher-count: none,
 					best-bid: none,
-					best-ask: none
+					best-ask: none,
+					market-session: none,
+					ema-price: none,
+					ema-confidence: none
 				})))))
 		;; Every declared property must have been consumed
 		(asserts! (is-eq (get remaining parsed) u0) ERR_TOO_MANY_PROPS)
@@ -201,15 +212,20 @@
 				publisher-count: (get publisher-count parsed),
 				best-bid: (get best-bid parsed),
 				best-ask: (get best-ask parsed),
-				;; Reserved fields the v1 subscription does not carry
-				ema-price: none,
-				ema-confidence: none,
+				market-session: (get market-session parsed),
+				ema-price: (get ema-price parsed),
+				ema-confidence: (get ema-confidence parsed),
+				;; Variable-length types this decoder does not parse (see set-property-field)
+				funding-rate: none,
+				funding-timestamp: none,
+				funding-rate-interval: none,
 				feed-update-timestamp: none
 			},
 			offset: (get offset parsed)
 		})))
 
-;; Inner fold step: Read the next property's type, save it if recognized, and advance cursor
+;; Inner fold step: Read the next property and advance cursor
+;; Fail on unrecognized/unsupported properties
 (define-private (parse-property
 		(slot_ uint)
 		(acc (response {
@@ -221,24 +237,21 @@
 			confidence: (optional uint),
 			publisher-count: (optional uint),
 			best-bid: (optional int),
-			best-ask: (optional int)
+			best-ask: (optional int),
+			market-session: (optional uint),
+			ema-price: (optional int),
+			ema-confidence: (optional uint)
 		} uint)))
-	(match acc
-		state
+	(let ((state (try! acc))
+			(remaining (get remaining state)))
+		(if (is-eq remaining u0)
+			acc
 			;; bytes/off are bound only in the active branch, so no-op tail iterations stay cheap
-			(let ((remaining (get remaining state)))
-				(if (is-eq remaining u0)
-					acc
-					(let ((bytes (get bytes state))
-							(off (get offset state))
-							(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA)))
-						(asserts! (<= ptype MAX_PROPERTY_TYPE) ERR_UNKNOWN_PROPERTY)
-						(let ((advanced (try! (set-property-field ptype bytes (+ off u1) state))))
-							(ok (merge advanced {
-								offset: (+ off u1 (property-width ptype)),
-								remaining: (- remaining u1)
-							}))))))
-		e (err e)))
+			(let ((bytes (get bytes state))
+					(off (get offset state))
+					(ptype (unwrap! (read-uint-be? bytes off u1) ERR_INVALID_FEED_DATA))
+					(stored (try! (set-property-field ptype bytes (+ off u1) state))))
+				(ok (merge stored { remaining: (- remaining u1) }))))))
 
 ;; Lazer's evm encoding has no Option type: A missing optional is encoded as 0, so the
 ;; reference PythLazerLib treats a parsed 0 (price/bid/ask/confidence/publisher-count) as
@@ -246,9 +259,9 @@
 (define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
 (define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
 
-;; Extract a property's value into the state
-;; Errors on a short read
-;; Maps `0` -> `none` as described above
+;; Read one property and advance cursor past it
+;; Handles all types declared as `PROP_*` constants, errors on unsupported properties
+;; Maps 0 -> `none` for some fields
 (define-private (set-property-field
 		(ptype uint)
 		(bytes (buff 8192))
@@ -262,29 +275,50 @@
 			confidence: (optional uint),
 			publisher-count: (optional uint),
 			best-bid: (optional int),
-			best-ask: (optional int)
+			best-ask: (optional int),
+			market-session: (optional uint),
+			ema-price: (optional int),
+			ema-confidence: (optional uint)
 		}))
 	(if (is-eq ptype PROP_PRICE)
-		(ok (merge state { price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+		(ok (merge state {
+			price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+			offset: (+ voffset u8) }))
 		(if (is-eq ptype PROP_BEST_BID)
-			(ok (merge state { best-bid: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+			(ok (merge state {
+				best-bid: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+				offset: (+ voffset u8) }))
 			(if (is-eq ptype PROP_BEST_ASK)
-				(ok (merge state { best-ask: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
+				(ok (merge state {
+					best-ask: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+					offset: (+ voffset u8) }))
 				(if (is-eq ptype PROP_PUBLISHER_COUNT)
-					(ok (merge state { publisher-count: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
+					(ok (merge state {
+						publisher-count: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)),
+						offset: (+ voffset u2) }))
 					(if (is-eq ptype PROP_EXPONENT)
-						(ok (merge state { exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)) }))
+						(ok (merge state {
+							exponent: (some (unwrap! (read-int-be? bytes voffset u2) ERR_INVALID_FEED_DATA)),
+							offset: (+ voffset u2) }))
 						(if (is-eq ptype PROP_CONFIDENCE)
-							(ok (merge state { confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)) }))
-							(ok state))))))))
-
-;; Value width (bytes) per property type:
-;;   - PublisherCount(u16)/Exponent(i16) -> 2
-;;   - MarketSession(u8) -> 1
-;;   - Everything else (i64/u64) -> 8
-(define-private (property-width (ptype uint))
-	(if (or (is-eq ptype u3) (is-eq ptype u4)) u2
-		(if (is-eq ptype u9) u1 u8)))
+							(ok (merge state {
+								confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+								offset: (+ voffset u8) }))
+							(if (is-eq ptype PROP_MARKET_SESSION)
+								;; 2-byte field bounded to 0-4; read unsigned so a negative int16 (> u4) also rejects
+								(let ((session (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)))
+									(asserts! (<= session u4) ERR_INVALID_MARKET_SESSION)
+									(ok (merge state { market-session: (some session), offset: (+ voffset u2) })))
+								(if (is-eq ptype PROP_EMA_PRICE)
+									(ok (merge state {
+										ema-price: (some-if-nonzero-int (unwrap! (read-int-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+										offset: (+ voffset u8) }))
+									(if (is-eq ptype PROP_EMA_CONFIDENCE)
+										(ok (merge state {
+											ema-confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
+											offset: (+ voffset u8) }))
+										;; Property type either invalid or unsupported
+										ERR_UNKNOWN_PROPERTY))))))))))
 
 ;;;; Trusted-signer check (Phase 1)
 

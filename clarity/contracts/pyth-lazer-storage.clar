@@ -25,10 +25,10 @@
 ;;     optional; the ORACLE skips a price-less feed (partial success) rather than
 ;;     rejecting the batch. `publish-time` (update timestamp, microseconds) and
 ;;     `channel` are supplied by the oracle; channel is recorded, not enforced.
-;;   - OPTIONAL `confidence` / `best-bid` / `best-ask` / `ema-*` /
-;;     `feed-update-timestamp`. The v1 decoder fills the first three; the rest are
-;;     reserved `none` so a later decoder can populate them without reshaping this
-;;     IMMUTABLE schema.
+;;   - OPTIONAL `confidence` / `best-bid` / `best-ask` / `market-session` / `ema-*`, parsed by
+;;     the v1 decoder, plus `funding-*` / `feed-update-timestamp`, reserved `none` for a later
+;;     decoder -- together the full AggregatedPriceFeedData set, without reshaping this IMMUTABLE
+;;     schema. (`market-session` is non-optional upstream, kept optional here.)
 (define-map prices uint {
 	price: int,
 	exponent: int,
@@ -36,6 +36,10 @@
 	confidence: (optional uint),
 	best-bid: (optional int),
 	best-ask: (optional int),
+	funding-rate: (optional int),
+	funding-timestamp: (optional uint),
+	funding-rate-interval: (optional uint),
+	market-session: (optional uint),
 	ema-price: (optional int),
 	ema-confidence: (optional uint),
 	feed-update-timestamp: (optional uint),
@@ -80,6 +84,10 @@
 			confidence: (optional uint),
 			best-bid: (optional int),
 			best-ask: (optional int),
+			funding-rate: (optional int),
+			funding-timestamp: (optional uint),
+			funding-rate-interval: (optional uint),
+			market-session: (optional uint),
 			ema-price: (optional int),
 			ema-confidence: (optional uint),
 			feed-update-timestamp: (optional uint),
@@ -103,6 +111,10 @@
 				confidence: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
+				funding-rate: (optional int),
+				funding-timestamp: (optional uint),
+				funding-rate-interval: (optional uint),
+				market-session: (optional uint),
 				ema-price: (optional int),
 				ema-confidence: (optional uint),
 				feed-update-timestamp: (optional uint),

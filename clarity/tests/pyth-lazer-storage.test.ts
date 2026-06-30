@@ -33,7 +33,8 @@ type EntryOpts = {
 };
 
 // The stored record (finalized schema): required price/exponent/publisher-count,
-// optional confidence + best-bid/ask + ema-* + feed-update-timestamp. Storage keeps
+// optional confidence + best-bid/ask + reserved tail (funding-*, market-session, ema-*,
+// feed-update-timestamp). Storage keeps
 // whatever the writer passes, so the same builder is used for the `write` input and
 // the `get-price` expectation. `confidence` defaults to `none` here (omitted) so the
 // guard tests that don't set it round-trip; tests that set it get `(some ...)`.
@@ -45,6 +46,10 @@ const stored = (o: EntryOpts) =>
     confidence: o.confidence === undefined ? Cl.none() : Cl.some(Cl.uint(o.confidence)),
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),
