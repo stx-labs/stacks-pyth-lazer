@@ -16,96 +16,123 @@
 ;;;; Public functions
 
 ;; Entrypoint for submitting price feeds. Called by relayer
-(define-public (verify-and-update-price-feeds (update (buff 8192)) (decoder <decoder-trait>))
-	(begin
-		;; Reject while paused
-		(try! (contract-call? .pyth-lazer-governance assert-active))
-		;; Only authorized decoder is allowed
-		(asserts! (is-eq (contract-of decoder) (contract-call? .pyth-lazer-governance get-decoder))
-			ERR_INVALID_DECODER)
-		(let ((decoded (try! (contract-call? decoder decode-and-verify-price-feeds update)))
-				;; Transform Pyth message format -> storage format
-				(records (get records (fold add-record (get price-feeds decoded) {
-					publish-time: (get timestamp decoded),
-					channel: (get channel decoded),
-					records: (list)
-				})))
-				(written (try! (contract-call? .pyth-lazer-storage write records))))
-			(try! (charge-fee))
-			(ok written))))
+(define-public (verify-and-update-price-feeds
+    (update (buff 8192))
+    (decoder <decoder-trait>)
+  )
+  (begin
+    ;; Reject while paused
+    (try! (contract-call? .pyth-lazer-governance assert-active))
+    ;; Only authorized decoder is allowed
+    (asserts!
+      (is-eq (contract-of decoder)
+        (contract-call? .pyth-lazer-governance get-decoder)
+      )
+      ERR_INVALID_DECODER
+    )
+    (let (
+        (decoded (try! (contract-call? decoder decode-and-verify-price-feeds update)))
+        ;; Transform Pyth message format -> storage format
+        (records (get records
+          (fold add-record (get price-feeds decoded) {
+            publish-time: (get timestamp decoded),
+            channel: (get channel decoded),
+            records: (list),
+          })
+        ))
+        (written (try! (contract-call? .pyth-lazer-storage write records)))
+      )
+      (try! (charge-fee))
+      (ok written)
+    )
+  )
+)
 
 ;;;; Private functions
 
 ;; Transform Pyth message format -> storage format
 ;; Extract `feed-id` from record, add `publish-time` and `channel`
 (define-private (add-record
-		(feed {
-			feed-id: uint,
-			price: int,
-			exponent: int,
-			publisher-count: uint,
-			confidence: (optional uint),
-			best-bid: (optional int),
-			best-ask: (optional int),
-			funding-rate: (optional int),
-			funding-timestamp: (optional uint),
-			funding-rate-interval: (optional uint),
-			market-session: (optional uint),
-			ema-price: (optional int),
-			ema-confidence: (optional uint),
-			feed-update-timestamp: (optional uint)
-		})
-		(acc {
-			publish-time: uint,
-			channel: uint,
-			records: (list 16 {
-				feed-id: uint,
-				record: {
-					price: int,
-					exponent: int,
-					publisher-count: uint,
-					confidence: (optional uint),
-					best-bid: (optional int),
-					best-ask: (optional int),
-					funding-rate: (optional int),
-					funding-timestamp: (optional uint),
-					funding-rate-interval: (optional uint),
-					market-session: (optional uint),
-					ema-price: (optional int),
-					ema-confidence: (optional uint),
-					feed-update-timestamp: (optional uint),
-					publish-time: uint,
-					channel: uint,
-				},
-			}),
-		}))
-	(merge acc {
-		;; #[allow(panic)]
-		records: (unwrap-panic (as-max-len? (append (get records acc) {
-			feed-id: (get feed-id feed),
-			record: {
-				price: (get price feed),
-				exponent: (get exponent feed),
-				publisher-count: (get publisher-count feed),
-				confidence: (get confidence feed),
-				best-bid: (get best-bid feed),
-				best-ask: (get best-ask feed),
-				funding-rate: (get funding-rate feed),
-				funding-timestamp: (get funding-timestamp feed),
-				funding-rate-interval: (get funding-rate-interval feed),
-				market-session: (get market-session feed),
-				ema-price: (get ema-price feed),
-				ema-confidence: (get ema-confidence feed),
-				feed-update-timestamp: (get feed-update-timestamp feed),
-				publish-time: (get publish-time acc),
-				channel: (get channel acc),
-			}
-		}) u16)) ;; NOTE: `as-max-len?` needs a LITERAL bound, not a constant
-	}))
+    (feed {
+      feed-id: uint,
+      price: int,
+      exponent: int,
+      publisher-count: uint,
+      confidence: (optional uint),
+      best-bid: (optional int),
+      best-ask: (optional int),
+      funding-rate: (optional int),
+      funding-timestamp: (optional uint),
+      funding-rate-interval: (optional uint),
+      market-session: (optional uint),
+      ema-price: (optional int),
+      ema-confidence: (optional uint),
+      feed-update-timestamp: (optional uint),
+    })
+    (acc {
+      publish-time: uint,
+      channel: uint,
+      records: (list 16
+        {
+          feed-id: uint,
+          record: {
+            price: int,
+            exponent: int,
+            publisher-count: uint,
+            confidence: (optional uint),
+            best-bid: (optional int),
+            best-ask: (optional int),
+            funding-rate: (optional int),
+            funding-timestamp: (optional uint),
+            funding-rate-interval: (optional uint),
+            market-session: (optional uint),
+            ema-price: (optional int),
+            ema-confidence: (optional uint),
+            feed-update-timestamp: (optional uint),
+            publish-time: uint,
+            channel: uint,
+          },
+        }
+      ),
+    })
+  )
+  (merge acc {
+    ;; #[allow(panic)]
+    records: (unwrap-panic (as-max-len?
+      (append (get records acc) {
+        feed-id: (get feed-id feed),
+        record: {
+          price: (get price feed),
+          exponent: (get exponent feed),
+          publisher-count: (get publisher-count feed),
+          confidence: (get confidence feed),
+          best-bid: (get best-bid feed),
+          best-ask: (get best-ask feed),
+          funding-rate: (get funding-rate feed),
+          funding-timestamp: (get funding-timestamp feed),
+          funding-rate-interval: (get funding-rate-interval feed),
+          market-session: (get market-session feed),
+          ema-price: (get ema-price feed),
+          ema-confidence: (get ema-confidence feed),
+          feed-update-timestamp: (get feed-update-timestamp feed),
+          publish-time: (get publish-time acc),
+          channel: (get channel acc),
+        },
+      })
+      u16
+    )),
+    ;; NOTE: `as-max-len?` needs a LITERAL bound, not a constant
+  })
+)
 
 ;; Charge fee to `tx-sender` for submitting price feeds
 (define-private (charge-fee)
-	(let ((fee (contract-call? .pyth-lazer-governance get-fee)))
-		(if (> fee u0)
-			(stx-transfer? fee tx-sender (contract-call? .pyth-lazer-governance get-fee-recipient))
-			(ok true))))
+  (let ((fee (contract-call? .pyth-lazer-governance get-fee)))
+    (if (> fee u0)
+      (stx-transfer? fee tx-sender
+        (contract-call? .pyth-lazer-governance get-fee-recipient)
+      )
+      (ok true)
+    )
+  )
+)
