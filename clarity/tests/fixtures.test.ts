@@ -195,7 +195,7 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
 }
 
 // PROP name -> decoder output field, kind, and how a spec value maps to the stored option:
-//   sentinel  -- a 0 decodes to none (Lazer's "missing" marker; base optionals + ema-*)
+//   sentinel  -- a 0 value decodes to none (protocol "missing" marker; applies to price, publisher-count, confidence, best-bid/ask, ema-*)
 //   literal   -- kept as-is, 0 included (exponent, market-session)
 //   existence -- existence-flagged (6/7/8/12): `null` -> none, any bigint -> some (present 0 kept)
 type OutRule = "sentinel" | "literal" | "existence";

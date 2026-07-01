@@ -343,7 +343,7 @@
 													(if (is-eq ptype PROP_FEED_UPDATE_TIMESTAMP)
 														(let ((r (try! (read-opt-uint64 bytes voffset))))
 															(ok (merge state { feed-update-timestamp: (get value r), offset: (get next r) })))
-														;; Property type either invalid or unsupported
+														;; Unknown property type
 														ERR_UNKNOWN_PROPERTY))))))))))))))
 
 ;;;; Trusted-signer check (Phase 1)
