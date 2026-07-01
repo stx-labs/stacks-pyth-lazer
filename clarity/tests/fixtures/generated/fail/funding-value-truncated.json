@@ -1,0 +1,11 @@
+{
+  "description": "an existence-flagged funding-rate present (flag 1) as the final property, but its 8-byte value is cut short before signing; the value read runs past the buffer",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "3"], ["FundingRate", "999"]] }
+  ],
+  "corrupt": "truncate-payload",
+  "corruptBytes": 3,
+  "expectErr": 2203
+}

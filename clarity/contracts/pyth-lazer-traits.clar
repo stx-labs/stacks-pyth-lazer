@@ -10,6 +10,7 @@
 			timestamp: uint,
 			channel: uint,
 			price-feeds: (list 16 {
+				;; Full Lazer property set
 				feed-id: uint,
 				price: int,
 				exponent: int,
@@ -17,8 +18,6 @@
 				confidence: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
-				;; Full Lazer property set. The v1 decoder leaves funding-* and feed-update-timestamp
-				;; `none` (not parsed); a later decoder can fill them without changing this trait.
 				funding-rate: (optional int),
 				funding-timestamp: (optional uint),
 				funding-rate-interval: (optional uint),

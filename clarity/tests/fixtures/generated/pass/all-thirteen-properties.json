@@ -1,0 +1,25 @@
+{
+  "description": "a single feed carrying every v1 property type (0-12) in mixed order: base + funding-* + market-session + ema-* + feed-update-timestamp",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 3,
+      "props": [
+        ["Price", "182000000000"],
+        ["BestBidPrice", "181999000000"],
+        ["BestAskPrice", "182001000000"],
+        ["PublisherCount", "19"],
+        ["Exponent", "-8"],
+        ["Confidence", "45000000"],
+        ["FundingRate", "12345"],
+        ["FundingTimestamp", "1700000000111111"],
+        ["FundingRateInterval", "3600000000"],
+        ["MarketSession", "2"],
+        ["EmaPrice", "181500000000"],
+        ["EmaConfidence", "50000000"],
+        ["FeedUpdateTimestamp", "1700000000222222"]
+      ]
+    }
+  ]
+}

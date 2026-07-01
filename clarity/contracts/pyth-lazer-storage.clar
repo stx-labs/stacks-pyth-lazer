@@ -19,16 +19,11 @@
 
 (define-data-var authorized-writer principal .pyth-lazer-oracle-v1)
 
-;; feed-id -> price record. Optional/required split mirrors
-;; `pyth-lazer-protocol`'s AggregatedPriceFeedData (verified on live evm updates):
-;;   - REQUIRED `price` / `exponent` / `publisher-count`. Only `price` is protocol-
-;;     optional; the ORACLE skips a price-less feed (partial success) rather than
-;;     rejecting the batch. `publish-time` (update timestamp, microseconds) and
-;;     `channel` are supplied by the oracle; channel is recorded, not enforced.
-;;   - OPTIONAL `confidence` / `best-bid` / `best-ask` / `market-session` / `ema-*`, parsed by
-;;     the v1 decoder, plus `funding-*` / `feed-update-timestamp`, reserved `none` for a later
-;;     decoder -- together the full AggregatedPriceFeedData set, without reshaping this IMMUTABLE
-;;     schema. (`market-session` is non-optional upstream, kept optional here.)
+;; Map `feed-id` -> price update record
+;; Fields taken from Pyth's `AggregatedPriceFeedData`:
+;;   - REQUIRED: `price`, `exponent`, and `publisher-count`
+;;     `price` is optional in the protocol, but we don't record feed updates with no price
+;;   - OPTIONAL All other properties
 (define-map prices uint {
 	price: int,
 	exponent: int,

@@ -130,10 +130,14 @@ Notes:
 - The property list is **sequential TLV** — you must walk every property to find the next
   feed; you cannot index into it. Mirror `PythLazerLib`'s "always advance the cursor" rule.
 - A subscription chooses *which* properties are present, so the parser must be
-  property-driven (read type byte → read its fixed width), not fixed-layout.
+  property-driven (read type byte → read its value), not fixed-layout.
+- Types **6/7/8/12** are *existence-flagged*: on the wire each is a 1-byte flag, then the
+  8-byte value **only when the flag is nonzero** (a 0 flag = absent, occupying a single byte).
+  Distinct from the base props, where a value of 0 is itself the "missing" sentinel. The
+  decoder reads these via `read-opt-int64` / `read-opt-uint64`.
 - `price` is an `int64` mantissa; the real price is `price * 10^exponent` (exponent `int16`).
-- v1 persists a core subset (`price`, `exponent`, `confidence`, publish/feed timestamp); the
-  storage schema reserves the rest as optionals — see decision #4 / §6.4.
+- The v1 decoder parses the full property set (0-12); the storage schema reserved every field
+  as an optional up front, so this coverage lands without reshaping it — see decision #4 / §6.4.
 
 ### 3.5 Trusted signers
 

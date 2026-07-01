@@ -1,0 +1,19 @@
+{
+  "description": "a feed that declares the existence-flagged properties but with flag 0 (null value); each occupies a single byte and decodes to none, leaving only the required fields",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 2,
+      "props": [
+        ["Price", "180000000000"],
+        ["Exponent", "-8"],
+        ["PublisherCount", "15"],
+        ["FundingRate", null],
+        ["FundingTimestamp", null],
+        ["FundingRateInterval", null],
+        ["FeedUpdateTimestamp", null]
+      ]
+    }
+  ]
+}

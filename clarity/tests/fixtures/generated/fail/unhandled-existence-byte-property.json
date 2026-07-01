@@ -1,9 +1,0 @@
-{
-  "description": "a valid price followed by FundingRate (type 6) -- a real Lazer property that uses the variable-length existence-byte encoding this decoder does not parse; the decoder fails closed rather than guessing a width",
-  "channel": 1,
-  "timestampUs": "1700000000000000",
-  "feeds": [
-    { "id": 1, "props": [["Price", "1000"], ["FundingRate", "999"]] }
-  ],
-  "expectErr": 2205
-}

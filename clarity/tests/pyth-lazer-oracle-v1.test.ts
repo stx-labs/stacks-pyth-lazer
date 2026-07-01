@@ -61,8 +61,8 @@ const getPrice = (feedId: number) =>
 
 // Expected stored record (finalized schema). The oracle requires
 // price/exponent/publisher-count and passes confidence through; best-bid/best-ask and the
-// reserved tail (funding-*, market-session, ema-*, feed-update-timestamp) are `none` for
-// the updates these tests build.
+// remaining optionals (funding-*, market-session, ema-*, feed-update-timestamp) are `none`
+// because the updates these tests build carry only the base properties.
 const storedRecord = (price: bigint, exponent: bigint, confidence: bigint, publisherCount: bigint) =>
   Cl.tuple({
     price: Cl.int(price),
