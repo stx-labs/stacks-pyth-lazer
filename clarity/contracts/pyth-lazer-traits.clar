@@ -17,8 +17,8 @@
 				confidence: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
-				;; Full Lazer property set. The v1 decoder leaves funding-* and feed-update-timestamp
-				;; `none` (not parsed); a later decoder can fill them without changing this trait.
+				;; Full Lazer property set, all populated by the v1 decoder. The trait carries every
+				;; field so a swapped-in decoder can change coverage without reshaping this interface.
 				funding-rate: (optional int),
 				funding-timestamp: (optional uint),
 				funding-rate-interval: (optional uint),

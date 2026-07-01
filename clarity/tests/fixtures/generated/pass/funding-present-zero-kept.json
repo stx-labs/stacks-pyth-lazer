@@ -1,0 +1,17 @@
+{
+  "description": "existence-flagged funding-rate and funding-timestamp present (flag 1) with value 0; unlike the base-prop sentinel, a flagged 0 is a real value and decodes to some(0)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 6,
+      "props": [
+        ["Price", "7500000000"],
+        ["Exponent", "-8"],
+        ["PublisherCount", "16"],
+        ["FundingRate", "0"],
+        ["FundingTimestamp", "0"]
+      ]
+    }
+  ]
+}

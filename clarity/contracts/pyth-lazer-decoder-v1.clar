@@ -38,19 +38,22 @@
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property types this decoder parses (the fixed-width Lazer types).
-;; Not supported:
-;;  - Variable-length types (6/7/8/12)
-;;  - Properties > 12
-(define-constant PROP_PRICE u0)             ;; int64
-(define-constant PROP_BEST_BID u1)          ;; int64
-(define-constant PROP_BEST_ASK u2)          ;; int64
-(define-constant PROP_PUBLISHER_COUNT u3)   ;; uint16
-(define-constant PROP_EXPONENT u4)          ;; int16
-(define-constant PROP_CONFIDENCE u5)        ;; uint64
-(define-constant PROP_MARKET_SESSION u9)    ;; int16, value 0-4
-(define-constant PROP_EMA_PRICE u10)        ;; int64
-(define-constant PROP_EMA_CONFIDENCE u11)   ;; uint64
+;; Property types this decoder parses -- the full v1 subscription set (0-12).
+;; Types 0-5 and 9-11 are fixed-width; 6/7/8/12 are existence-flagged (see read-opt-*).
+;; A type > 12 is unknown and rejected (ERR_UNKNOWN_PROPERTY).
+(define-constant PROP_PRICE u0)                  ;; int64
+(define-constant PROP_BEST_BID u1)               ;; int64
+(define-constant PROP_BEST_ASK u2)               ;; int64
+(define-constant PROP_PUBLISHER_COUNT u3)        ;; uint16
+(define-constant PROP_EXPONENT u4)               ;; int16
+(define-constant PROP_CONFIDENCE u5)             ;; uint64
+(define-constant PROP_FUNDING_RATE u6)           ;; int64, existence-flagged
+(define-constant PROP_FUNDING_TIMESTAMP u7)      ;; uint64, existence-flagged
+(define-constant PROP_FUNDING_RATE_INTERVAL u8)  ;; uint64, existence-flagged
+(define-constant PROP_MARKET_SESSION u9)         ;; int16, value 0-4
+(define-constant PROP_EMA_PRICE u10)             ;; int64
+(define-constant PROP_EMA_CONFIDENCE u11)        ;; uint64
+(define-constant PROP_FEED_UPDATE_TIMESTAMP u12) ;; uint64, existence-flagged
 
 ;; Max feeds parsed per update. Must match size of `FEED_SLOTS`
 (define-constant MAX_FEEDS u16)
@@ -197,9 +200,13 @@
 					publisher-count: none,
 					best-bid: none,
 					best-ask: none,
+					funding-rate: none,
+					funding-timestamp: none,
+					funding-rate-interval: none,
 					market-session: none,
 					ema-price: none,
-					ema-confidence: none
+					ema-confidence: none,
+					feed-update-timestamp: none
 				})))))
 		;; Every declared property must have been consumed
 		(asserts! (is-eq (get remaining parsed) u0) ERR_TOO_MANY_PROPS)
@@ -212,20 +219,19 @@
 				publisher-count: (get publisher-count parsed),
 				best-bid: (get best-bid parsed),
 				best-ask: (get best-ask parsed),
+				funding-rate: (get funding-rate parsed),
+				funding-timestamp: (get funding-timestamp parsed),
+				funding-rate-interval: (get funding-rate-interval parsed),
 				market-session: (get market-session parsed),
 				ema-price: (get ema-price parsed),
 				ema-confidence: (get ema-confidence parsed),
-				;; Variable-length types this decoder does not parse (see set-property-field)
-				funding-rate: none,
-				funding-timestamp: none,
-				funding-rate-interval: none,
-				feed-update-timestamp: none
+				feed-update-timestamp: (get feed-update-timestamp parsed)
 			},
 			offset: (get offset parsed)
 		})))
 
 ;; Inner fold step: Read the next property and advance cursor
-;; Fail on unrecognized/unsupported properties
+;; Fail on unrecognized property types (> 12)
 (define-private (parse-property
 		(slot_ uint)
 		(acc (response {
@@ -238,9 +244,13 @@
 			publisher-count: (optional uint),
 			best-bid: (optional int),
 			best-ask: (optional int),
+			funding-rate: (optional int),
+			funding-timestamp: (optional uint),
+			funding-rate-interval: (optional uint),
 			market-session: (optional uint),
 			ema-price: (optional int),
-			ema-confidence: (optional uint)
+			ema-confidence: (optional uint),
+			feed-update-timestamp: (optional uint)
 		} uint)))
 	(let ((state (try! acc))
 			(remaining (get remaining state)))
@@ -259,6 +269,23 @@
 (define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
 (define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
 
+;; Existence-flagged value: a 1-byte flag, then the 8-byte value only when the flag is nonzero.
+;; The flag (not the value) signals presence, so a present 0 stays `(some 0)`, unlike the base
+;; props above. Returns the value and the offset past it (advances 1 byte if absent, 9 if present).
+(define-private (read-opt-int64 (bytes (buff 8192)) (voffset uint))
+	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
+		(ok { value: none, next: (+ voffset u1) })
+		(ok {
+			value: (some (unwrap! (read-int-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
+			next: (+ voffset u9) })))
+
+(define-private (read-opt-uint64 (bytes (buff 8192)) (voffset uint))
+	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
+		(ok { value: none, next: (+ voffset u1) })
+		(ok {
+			value: (some (unwrap! (read-uint-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
+			next: (+ voffset u9) })))
+
 ;; Read one property and advance cursor past it
 ;; Handles all types declared as `PROP_*` constants, errors on unsupported properties
 ;; Maps 0 -> `none` for some fields
@@ -276,9 +303,13 @@
 			publisher-count: (optional uint),
 			best-bid: (optional int),
 			best-ask: (optional int),
+			funding-rate: (optional int),
+			funding-timestamp: (optional uint),
+			funding-rate-interval: (optional uint),
 			market-session: (optional uint),
 			ema-price: (optional int),
-			ema-confidence: (optional uint)
+			ema-confidence: (optional uint),
+			feed-update-timestamp: (optional uint)
 		}))
 	(if (is-eq ptype PROP_PRICE)
 		(ok (merge state {
@@ -317,8 +348,20 @@
 										(ok (merge state {
 											ema-confidence: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u8) ERR_INVALID_FEED_DATA)),
 											offset: (+ voffset u8) }))
-										;; Property type either invalid or unsupported
-										ERR_UNKNOWN_PROPERTY))))))))))
+										(if (is-eq ptype PROP_FUNDING_RATE)
+											(let ((r (try! (read-opt-int64 bytes voffset))))
+												(ok (merge state { funding-rate: (get value r), offset: (get next r) })))
+											(if (is-eq ptype PROP_FUNDING_TIMESTAMP)
+												(let ((r (try! (read-opt-uint64 bytes voffset))))
+													(ok (merge state { funding-timestamp: (get value r), offset: (get next r) })))
+												(if (is-eq ptype PROP_FUNDING_RATE_INTERVAL)
+													(let ((r (try! (read-opt-uint64 bytes voffset))))
+														(ok (merge state { funding-rate-interval: (get value r), offset: (get next r) })))
+													(if (is-eq ptype PROP_FEED_UPDATE_TIMESTAMP)
+														(let ((r (try! (read-opt-uint64 bytes voffset))))
+															(ok (merge state { feed-update-timestamp: (get value r), offset: (get next r) })))
+														;; Property type either invalid or unsupported
+														ERR_UNKNOWN_PROPERTY))))))))))))))
 
 ;;;; Trusted-signer check (Phase 1)
 

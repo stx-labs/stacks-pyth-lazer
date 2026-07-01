@@ -39,9 +39,9 @@ function decode(payload: Uint8Array) {
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
-// The decoded per-feed shape. price/exponent/publisher-count are required (the decoder drops
-// feeds missing them); confidence/best-bid/best-ask/market-session/ema-* are populated when
-// present; funding-* and feed-update-timestamp are always `none` (not parsed).
+// The decoded per-feed shape. price/exponent/publisher-count are required (feeds missing them
+// are dropped); every other field is `some` when present, else `none`. For the existence-flagged
+// fields (fr/ft/fri/fut) a present value passes straight through (a present 0 included).
 const feedRecord = (
   id: number,
   price: bigint,
@@ -54,6 +54,10 @@ const feedRecord = (
     ms?: bigint | null;
     ema?: bigint | null;
     emaConf?: bigint | null;
+    fr?: bigint | null;
+    ft?: bigint | null;
+    fri?: bigint | null;
+    fut?: bigint | null;
   } = {},
 ) =>
   Cl.tuple({
@@ -64,13 +68,13 @@ const feedRecord = (
     "publisher-count": Cl.uint(pub),
     "best-bid": optInt(extra.bid ?? null),
     "best-ask": optInt(extra.ask ?? null),
-    "funding-rate": Cl.none(),
-    "funding-timestamp": Cl.none(),
-    "funding-rate-interval": Cl.none(),
+    "funding-rate": optInt(extra.fr ?? null),
+    "funding-timestamp": optUint(extra.ft ?? null),
+    "funding-rate-interval": optUint(extra.fri ?? null),
     "market-session": optUint(extra.ms ?? null),
     "ema-price": optInt(extra.ema ?? null),
     "ema-confidence": optUint(extra.emaConf ?? null),
-    "feed-update-timestamp": Cl.none(),
+    "feed-update-timestamp": optUint(extra.fut ?? null),
   });
 
 const decoded = (channel: number, feeds: ReturnType<typeof feedRecord>[]) =>
@@ -182,15 +186,57 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     expect(decode(payload)).toBeErr(Cl.uint(ERR_INVALID_MARKET_SESSION));
   });
 
-  it("rejects a feed carrying a variable-length property the decoder does not parse (funding-rate)", () => {
+  it("decodes the existence-flagged properties when present (funding-*, feed-update-timestamp)", () => {
     trust();
     const payload = buildLazerPayload({
       timestamp: TS,
       channel: REAL_TIME,
-      feeds: [{ id: 4, props: [[PROP.Price, 5n], [PROP.FundingRate, 999n], [PROP.Exponent, -3n], [PROP.PublisherCount, 1n]] }],
+      feeds: [{
+        id: 8,
+        props: [
+          [PROP.Price, 5n],
+          [PROP.FundingRate, -125n], // int64: funding rates can be negative
+          [PROP.Exponent, -3n],
+          [PROP.FundingTimestamp, 1_700_000_000n],
+          [PROP.PublisherCount, 1n],
+          [PROP.FundingRateInterval, 3_600n],
+          [PROP.FeedUpdateTimestamp, 1_699_999_999n],
+        ],
+      }],
     });
-    // FundingRate (6) is an existence-byte type the decoder does not parse -> rejected.
-    expect(decode(payload)).toBeErr(Cl.uint(ERR_UNKNOWN_PROPERTY));
+    expect(decode(payload)).toBeOk(
+      decoded(REAL_TIME, [
+        feedRecord(8, 5n, -3n, 1n, null, { fr: -125n, ft: 1_700_000_000n, fri: 3_600n, fut: 1_699_999_999n }),
+      ]),
+    );
+  });
+
+  it("keeps a present funding-rate / funding-timestamp of 0 as some(0) -- the flag signals presence, not a nonzero value", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{
+        id: 8,
+        props: [[PROP.Price, 5n], [PROP.Exponent, -3n], [PROP.PublisherCount, 1n], [PROP.FundingRate, 0n], [PROP.FundingTimestamp, 0n]],
+      }],
+    });
+    // Contrast the "0 ema-price -> none" test above: existence-flagged types never collapse 0.
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(8, 5n, -3n, 1n, null, { fr: 0n, ft: 0n })]));
+  });
+
+  it("decodes existence-flagged properties as none when their flag is 0 (declared but absent)", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{
+        id: 8,
+        // null value => existence flag 0 => the property occupies a single byte and yields none
+        props: [[PROP.Price, 5n], [PROP.Exponent, -3n], [PROP.PublisherCount, 1n], [PROP.FundingRate, null], [PROP.FeedUpdateTimestamp, null]],
+      }],
+    });
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(8, 5n, -3n, 1n)]));
   });
 
   it("drops a feed missing a required field, keeping the complete ones", () => {

@@ -66,12 +66,17 @@ export const PROP = {
   FeedUpdateTimestamp: 12,
 } as const;
 
-// Value width per type. 0-5 and 9-11 match the on-chain decoder; 6/7/8/12 are filler -- the
-// decoder rejects them at the type byte, so their value bytes are never read.
+// Fixed-width value size per type (bytes); 0-5 and 9-11 match the on-chain decoder.
+// Types 6/7/8/12 are existence-flagged (see EXISTENCE_FLAGGED) and encoded separately.
 const PROP_WIDTH: Record<number, number> = {
-  0: 8, 1: 8, 2: 8, 3: 2, 4: 2, 5: 8, 6: 8, 7: 8, 8: 8, 9: 2, 10: 8, 11: 8, 12: 8,
+  0: 8, 1: 8, 2: 8, 3: 2, 4: 2, 5: 8, 9: 2, 10: 8, 11: 8,
 };
 const PROP_SIGNED: Record<number, boolean> = { 0: true, 1: true, 2: true, 4: true, 6: true, 10: true };
+
+// Existence-flagged properties: a 1-byte flag, then an 8-byte value only when nonzero. In a
+// FeedSpec, `null` encodes absent (flag 0); any bigint encodes present (flag 1 + value, incl. 0).
+const EXISTENCE_FLAGGED = new Set([6, 7, 8, 12]);
+const EXISTENCE_VALUE_WIDTH = 8;
 
 function uBE(value: bigint, width: number): Uint8Array {
   const out = new Uint8Array(width);
@@ -83,12 +88,20 @@ function uBE(value: bigint, width: number): Uint8Array {
   return out;
 }
 
-export type FeedSpec = { id: number; props: Array<[number, bigint]> };
+// A property value is a bigint, or null to encode an existence-flagged property as absent.
+export type FeedSpec = { id: number; props: Array<[number, bigint | null]> };
 
-/** Encode one property: type byte + value (two's-complement BE, type-dependent width). */
-export function encodeProperty(type: number, value: bigint): Uint8Array {
-  const width = PROP_WIDTH[type] ?? 8; // unknown types still get 8 bytes of (unread) data
+/** Encode one property: type byte + value (two's-complement BE, type-dependent width).
+ *  Existence-flagged types (6/7/8/12) emit a flag byte first; `null` encodes absent (flag 0). */
+export function encodeProperty(type: number, value: bigint | null): Uint8Array {
   const signed = PROP_SIGNED[type] ?? false;
+  if (EXISTENCE_FLAGGED.has(type)) {
+    if (value === null) return Uint8Array.from([type, 0x00]); // flag 0 -> absent, no value bytes
+    const raw = signed ? BigInt.asUintN(EXISTENCE_VALUE_WIDTH * 8, value) : value;
+    return concatBytes(Uint8Array.from([type, 0x01]), uBE(raw, EXISTENCE_VALUE_WIDTH));
+  }
+  if (value === null) throw new Error(`property type ${type} is fixed-width; null is only valid for existence-flagged types`);
+  const width = PROP_WIDTH[type] ?? 8; // unknown types still get 8 bytes of (unread) data
   const raw = signed ? BigInt.asUintN(width * 8, value) : value;
   return concatBytes(Uint8Array.from([type]), uBE(raw, width));
 }

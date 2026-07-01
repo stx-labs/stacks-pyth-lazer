@@ -1,0 +1,19 @@
+{
+  "description": "a feed carrying all four existence-flagged properties present (flag 1), including a negative funding-rate; each decodes to some(value)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 1,
+      "props": [
+        ["Price", "6650000000000"],
+        ["Exponent", "-8"],
+        ["PublisherCount", "20"],
+        ["FundingRate", "-4200"],
+        ["FundingTimestamp", "1700000000000000"],
+        ["FundingRateInterval", "28800000000"],
+        ["FeedUpdateTimestamp", "1699999999500000"]
+      ]
+    }
+  ]
+}

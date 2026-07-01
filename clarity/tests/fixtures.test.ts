@@ -18,7 +18,8 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 //       { description, channel, timestampUs, feeds: [{ id, props: [[type, dec-str]] }],
 //         corrupt?, expectErr? } -- the runner encodes the payload, signs it with the
 //       TEST key, and decodes on-chain. `props` type is a PROP name or a raw number
-//       (for unknown-type cases); values are decimal strings (big ints / negatives).
+//       (for unknown-type cases); values are decimal strings (big ints / negatives), or
+//       null to encode an existence-flagged property (6/7/8/12) as absent (flag 0).
 //       pass: the decode must equal the spec. fail: it must error with `expectErr`.
 //
 // captured fixtures are signed by Pyth's PRODUCTION key; generated ones by the
@@ -140,7 +141,8 @@ const capturedStored = (f: any, c: any) =>
 const propType = (t: number | string) => (typeof t === "number" ? t : (PROP as Record<string, number>)[t]);
 const toFeedSpec = (f: any): FeedSpec => ({
   id: f.id,
-  props: f.props.map(([t, v]: [number | string, string]) => [propType(t), BigInt(v)]),
+  // a null prop value encodes an existence-flagged property (6/7/8/12) as absent (flag 0)
+  props: f.props.map(([t, v]: [number | string, string | null]) => [propType(t), v === null ? null : BigInt(v)]),
 });
 
 // Build the signed update for a spec, optionally applying a `corrupt` directive to
@@ -192,48 +194,66 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
   return update;
 }
 
-// PROP name -> decoder output field. The runner models only these six, so a pass fixture must
-// use only them; market-session/ema-* are parsed too (unit-tested), existence-byte types rejected.
-const PROP_OUT: Record<string, { field: string; kind: "int" | "uint" }> = {
-  Price: { field: "price", kind: "int" },
-  Exponent: { field: "exponent", kind: "int" },
-  Confidence: { field: "confidence", kind: "uint" },
-  PublisherCount: { field: "publisher-count", kind: "uint" },
-  BestBidPrice: { field: "best-bid", kind: "int" },
-  BestAskPrice: { field: "best-ask", kind: "int" },
+// PROP name -> decoder output field, kind, and how a spec value maps to the stored option:
+//   sentinel  -- a 0 decodes to none (Lazer's "missing" marker; base optionals + ema-*)
+//   literal   -- kept as-is, 0 included (exponent, market-session)
+//   existence -- existence-flagged (6/7/8/12): `null` -> none, any bigint -> some (present 0 kept)
+type OutRule = "sentinel" | "literal" | "existence";
+const PROP_OUT: Record<string, { field: string; kind: "int" | "uint"; rule: OutRule }> = {
+  Price: { field: "price", kind: "int", rule: "sentinel" },
+  Exponent: { field: "exponent", kind: "int", rule: "literal" },
+  Confidence: { field: "confidence", kind: "uint", rule: "sentinel" },
+  PublisherCount: { field: "publisher-count", kind: "uint", rule: "sentinel" },
+  BestBidPrice: { field: "best-bid", kind: "int", rule: "sentinel" },
+  BestAskPrice: { field: "best-ask", kind: "int", rule: "sentinel" },
+  FundingRate: { field: "funding-rate", kind: "int", rule: "existence" },
+  FundingTimestamp: { field: "funding-timestamp", kind: "uint", rule: "existence" },
+  FundingRateInterval: { field: "funding-rate-interval", kind: "uint", rule: "existence" },
+  MarketSession: { field: "market-session", kind: "uint", rule: "literal" },
+  EmaPrice: { field: "ema-price", kind: "int", rule: "sentinel" },
+  EmaConfidence: { field: "ema-confidence", kind: "uint", rule: "sentinel" },
+  FeedUpdateTimestamp: { field: "feed-update-timestamp", kind: "uint", rule: "existence" },
 };
 
-// Build the expected decoded feed, or null if the decoder would drop it (a required
-// field -- price/exponent/publisher-count -- absent). A 0 in an optional field, and a 0
-// price/publisher-count, is Lazer's "missing" sentinel and decodes to none; exponent is
-// always literal (a 0 exponent is a real value).
+// The optional tail (every field but feed-id + the 3 required), so the expected tuple is
+// built the same regardless of which props a spec carries.
+const OPTIONAL_OUT: Array<{ field: string; kind: "int" | "uint" }> = [
+  { field: "confidence", kind: "uint" },
+  { field: "best-bid", kind: "int" },
+  { field: "best-ask", kind: "int" },
+  { field: "funding-rate", kind: "int" },
+  { field: "funding-timestamp", kind: "uint" },
+  { field: "funding-rate-interval", kind: "uint" },
+  { field: "market-session", kind: "uint" },
+  { field: "ema-price", kind: "int" },
+  { field: "ema-confidence", kind: "uint" },
+  { field: "feed-update-timestamp", kind: "uint" },
+];
+
+// Build the expected decoded feed, or null if the decoder drops it (a required field --
+// price/exponent/publisher-count -- resolves to none). Each prop resolves per its rule above.
 function expectedFeedFromSpec(f: any) {
-  const present = new Map<string, bigint>();
+  const resolved = new Map<string, bigint | null>();
   for (const [name, v] of f.props) {
     const o = PROP_OUT[name as string];
     if (!o) continue;
-    if (name !== "Exponent" && BigInt(v) === 0n) continue; // sentinel -> none
-    present.set(o.field, BigInt(v));
+    const val: bigint | null = v === null ? null : BigInt(v);
+    resolved.set(o.field, o.rule === "sentinel" && val === 0n ? null : val);
   }
-  // A feed missing any required field is dropped by the decoder.
-  if (!present.has("price") || !present.has("exponent") || !present.has("publisher-count")) return null;
-  const optI = (field: string) => (present.has(field) ? Cl.some(Cl.int(present.get(field)!)) : Cl.none());
-  return Cl.tuple({
+  const present = (field: string) => resolved.get(field) != null;
+  if (!present("price") || !present("exponent") || !present("publisher-count")) return null;
+  const opt = (field: string, kind: "int" | "uint") => {
+    const v = resolved.get(field);
+    return v == null ? Cl.none() : Cl.some(kind === "int" ? Cl.int(v) : Cl.uint(v));
+  };
+  const fields: Record<string, ReturnType<typeof Cl.uint>> = {
     "feed-id": Cl.uint(f.id),
-    price: Cl.int(present.get("price")!),
-    exponent: Cl.int(present.get("exponent")!),
-    "publisher-count": Cl.uint(present.get("publisher-count")!),
-    confidence: present.has("confidence") ? Cl.some(Cl.uint(present.get("confidence")!)) : Cl.none(),
-    "best-bid": optI("best-bid"),
-    "best-ask": optI("best-ask"),
-    "funding-rate": Cl.none(),
-    "funding-timestamp": Cl.none(),
-    "funding-rate-interval": Cl.none(),
-    "market-session": Cl.none(),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
-    "feed-update-timestamp": Cl.none(),
-  });
+    price: Cl.int(resolved.get("price")!),
+    exponent: Cl.int(resolved.get("exponent")!),
+    "publisher-count": Cl.uint(resolved.get("publisher-count")!),
+  };
+  for (const { field, kind } of OPTIONAL_OUT) fields[field] = opt(field, kind);
+  return Cl.tuple(fields);
 }
 
 const expectedDecodeFromSpec = (spec: any) =>
