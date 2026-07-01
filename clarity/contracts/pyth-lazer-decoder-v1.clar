@@ -38,9 +38,9 @@
 (define-constant PAYLOAD_FEEDS_LEN_OFFSET u13)
 (define-constant FEEDS_OFFSET u14)
 
-;; Property types this decoder parses -- the full v1 subscription set (0-12).
-;; Types 0-5 and 9-11 are fixed-width; 6/7/8/12 are existence-flagged (see read-opt-*).
-;; A type > 12 is unknown and rejected (ERR_UNKNOWN_PROPERTY).
+;; Lazer Property Types
+;; Types 0-5 and 9-11 are fixed-width
+;; Types 6/7/8/12 are existence-flagged (see read-opt-*).
 (define-constant PROP_PRICE u0) ;; int64
 (define-constant PROP_BEST_BID u1) ;; int64
 (define-constant PROP_BEST_ASK u2) ;; int64
