@@ -8,10 +8,9 @@
 // update. Two feed counts give a linear model (fixed overhead + per-feed cost).
 import { initSimnet } from "@stacks/clarinet-sdk";
 import { Cl } from "@stacks/transactions";
-import { hexToBytes } from "@noble/hashes/utils";
 import { readFileSync } from "node:fs";
+import { PROD_SIGNER, hexToBytes } from "./lib/lazer.mjs";
 
-const PROD_SIGNER = "03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b";
 const FAR_FUTURE = 100_000_000_000n;
 const DECODER = "pyth-lazer-decoder-v1";
 const ORACLE = "pyth-lazer-oracle-v1";

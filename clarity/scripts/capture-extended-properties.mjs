@@ -13,19 +13,15 @@
 // market-session is always `regular` (0) and funding is always ABSENT (existence flag 0);
 // those gaps are covered elsewhere. Run:
 //
-//   node --env-file=.env scripts/gen-extended-fixtures.mjs
+//   node --env-file=.env scripts/capture-extended-properties.mjs
 import { writeFileSync, mkdirSync } from "node:fs";
 import WebSocket from "ws";
-import { secp256k1 } from "@noble/curves/secp256k1";
-import { keccak_256 } from "@noble/hashes/sha3";
-import { hexToBytes, bytesToHex } from "@noble/hashes/utils";
+import { requireToken, recoverSigner, channelByte, PROD_SIGNER, authedWsUrl, WS_URLS, hexToBytes } from "./lib/lazer.mjs";
 
-const TOKEN = process.env.PYTH_API_KEY;
-if (!TOKEN) { console.error("PYTH_API_KEY not set (run with --env-file=.env)"); process.exit(1); }
+const TOKEN = requireToken();
 
 const CHANNEL = "fixed_rate@1000ms"; // channel byte 4; the only tier this key allows
 const ERR_UNKNOWN_PROPERTY = 2205;
-const KNOWN_PROD_SIGNER = "03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b";
 const DEC_DIR = "tests/fixtures/captured";
 const REJ_DIR = "tests/fixtures/captured-reject";
 
@@ -45,7 +41,7 @@ const be = (b, o, n) => { let v = 0n; for (let i = 0; i < n; i++) v = (v << 8n) 
 // Walk the evm payload; return per-feed present property types + a cursor-exactness flag.
 function walk(evm) {
   const len = (evm[69] << 8) | evm[70], p0 = 71, end = p0 + len;
-  const channel = evm[p0 + 12], feedsLen = evm[p0 + 13];
+  const channel = channelByte(evm), feedsLen = evm[p0 + 13];
   let off = p0 + 14;
   const feeds = [];
   for (let fi = 0; fi < feedsLen; fi++) {
@@ -67,23 +63,13 @@ function walk(evm) {
   return { ok: off === end, channel, feedsLen, feeds };
 }
 
-function recoverSigner(evm) {
-  const r = evm.slice(4, 36), s = evm.slice(36, 68), recid = evm[68];
-  const len = (evm[69] << 8) | evm[70];
-  const payload = evm.slice(71, 71 + len);
-  const sig = secp256k1.Signature.fromCompact(bytesToHex(r) + bytesToHex(s)).addRecoveryBit(recid);
-  return bytesToHex(sig.recoverPublicKey(keccak_256(payload)).toRawBytes(true));
-}
-
 // A decodable feed must not carry a raw 0 in a field the on-chain runner does not treat
 // as a sentinel (price/confidence/publisher-count/bid/ask), else expected != decoded.
 const SENTINEL_SAFE = (f) =>
   [f.price, f.confidence, f.publisherCount, f.bestBidPrice, f.bestAskPrice]
     .every((v) => v === undefined || v === null || BigInt(v) !== 0n);
 
-const url = new URL("wss://pyth-lazer-0.dourolabs.app/v1/stream");
-url.searchParams.set("ACCESS_TOKEN", TOKEN);
-const ws = new WebSocket(url.toString());
+const ws = new WebSocket(authedWsUrl(WS_URLS[0], TOKEN));
 await new Promise((res, rej) => {
   ws.on("open", res);
   ws.on("error", (e) => rej(new Error(String(e?.message ?? e))));
@@ -119,7 +105,7 @@ function collect({ feeds, props, count, staggerMs, label }) {
 mkdirSync(DEC_DIR, { recursive: true });
 mkdirSync(REJ_DIR, { recursive: true });
 let signerWarn = false;
-const checkSigner = (evm) => { const s = recoverSigner(evm); if (s !== KNOWN_PROD_SIGNER) { console.log(`  !! signer 0x${s} != known prod`); signerWarn = true; } };
+const checkSigner = (evm) => { const s = recoverSigner(evm).compressed; if (s !== PROD_SIGNER) { console.log(`  !! signer 0x${s} != known prod`); signerWarn = true; } };
 
 console.log("Group A: decodable (supported props incl. marketSession/emaPrice/emaConfidence)");
 const A = await collect({ feeds: CRYPTO_FEEDS, props: SUPPORTED, count: 8, staggerMs: 2000, label: "decodable" });
