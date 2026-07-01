@@ -1,0 +1,39 @@
+{
+  "description": "real update carrying funding (6/7/8, absent) + feed-update-timestamp (12); decoder fails closed",
+  "expectErr": 2205,
+  "rejectedTypesPresent": [
+    6,
+    7,
+    8,
+    12
+  ],
+  "channel": 4,
+  "timestampUs": "1782911062000000",
+  "parsed": {
+    "timestampUs": "1782911062000000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 1,
+        "price": "5860010632929",
+        "publisherCount": 19,
+        "exponent": -8,
+        "feedUpdateTimestamp": 1782911062000000
+      },
+      {
+        "priceFeedId": 2,
+        "price": "157151716060",
+        "publisherCount": 20,
+        "exponent": -8,
+        "feedUpdateTimestamp": 1782911062000000
+      },
+      {
+        "priceFeedId": 6,
+        "price": "7478252937",
+        "publisherCount": 17,
+        "exponent": -8,
+        "feedUpdateTimestamp": 1782911062000000
+      }
+    ]
+  },
+  "evmHex": "2a22999a71182014a35e6d45df5ced72f144590340b6733064c89db11b6b1e7126e14db13b6a5b0c3940ada9c5d6954bb8732fbfde03b62d6ee12cb4cc897327782cec0801007a93c7d3750006558c5484418004030000000107000000055463da26e104fff80300130600070008000c010006558c548441800000000207000000002496f8e2dc04fff80300140600070008000c010006558c5484418000000006070000000001bdbd158904fff80300110600070008000c010006558c54844180"
+}

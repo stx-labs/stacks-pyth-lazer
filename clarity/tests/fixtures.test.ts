@@ -13,6 +13,11 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 //       must decode to `parsed` (Pyth's own SDK decode). Replayed in publish-time
 //       order to exercise storage's monotonic guard.
 //
+//   fixtures/captured-reject/<timestampUs>.json   REAL updates carrying a property the
+//       decoder fails closed on (variable-length existence-byte types: funding 6/7/8,
+//       feed-update-timestamp 12). Same shape + { description, expectErr } -- evmHex must
+//       be REJECTED with expectErr (they cannot decode, so they are not replayed).
+//
 //   fixtures/generated/pass/<name>.json    synthetic specs that MUST decode
 //   fixtures/generated/fail/<name>.json    synthetic specs that MUST be rejected
 //       { description, channel, timestampUs, feeds: [{ id, props: [[type, dec-str]] }],
@@ -57,6 +62,7 @@ function load(rel: string): Fixture[] {
 }
 
 const captured = load("captured");
+const capturedReject = load("captured-reject");
 const genPass = load("generated/pass");
 const genFail = load("generated/fail");
 
@@ -85,6 +91,21 @@ const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 const big = (v: string | number | null | undefined) => (v === null || v === undefined ? null : BigInt(v));
 
+// Extended props the decoder parses. Pyth serializes market-session as a label; the decoder
+// stores the numeric enum and always keeps it (0 = regular is a real value, not a sentinel).
+// ema-price/ema-confidence mirror the decoder's some-if-nonzero collapse (0 -> none).
+const SESSION_TO_INT: Record<string, bigint> = { regular: 0n };
+const sessionOpt = (v: string | number | null | undefined) => {
+  if (v === null || v === undefined) return Cl.none();
+  const n = typeof v === "number" ? BigInt(v) : SESSION_TO_INT[v];
+  if (n === undefined) throw new Error(`unmapped market-session label: ${v}`);
+  return Cl.some(Cl.uint(n));
+};
+const nonzeroIntOpt = (v: string | null | undefined) =>
+  v == null || BigInt(v) === 0n ? Cl.none() : Cl.some(Cl.int(BigInt(v)));
+const nonzeroUintOpt = (v: string | null | undefined) =>
+  v == null || BigInt(v) === 0n ? Cl.none() : Cl.some(Cl.uint(BigInt(v)));
+
 // === captured: real evm bytes must decode to Pyth's own parsed values ===
 
 // The decoder only emits feeds carrying all required fields; feeds missing one are dropped.
@@ -102,9 +123,9 @@ const capturedFeed = (f: any) =>
     "funding-rate": Cl.none(),
     "funding-timestamp": Cl.none(),
     "funding-rate-interval": Cl.none(),
-    "market-session": Cl.none(),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
+    "market-session": sessionOpt(f.marketSession),
+    "ema-price": nonzeroIntOpt(f.emaPrice),
+    "ema-confidence": nonzeroUintOpt(f.emaConfidence),
     "feed-update-timestamp": Cl.none(),
   });
 
@@ -127,9 +148,9 @@ const capturedStored = (f: any, c: any) =>
     "funding-rate": Cl.none(),
     "funding-timestamp": Cl.none(),
     "funding-rate-interval": Cl.none(),
-    "market-session": Cl.none(),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
+    "market-session": sessionOpt(f.marketSession),
+    "ema-price": nonzeroIntOpt(f.emaPrice),
+    "ema-confidence": nonzeroUintOpt(f.emaConfidence),
     "feed-update-timestamp": Cl.none(),
     "publish-time": Cl.uint(BigInt(c.timestampUs)),
     channel: Cl.uint(c.channel),
@@ -286,6 +307,17 @@ describe("fixtures: captured real Lazer updates", () => {
     // stored at a >= publish-time), leaving the count at zero.
     expect(submit(hexToBytes(seq[0].evmHex))).toBeOk(Cl.uint(0));
   });
+});
+
+describe("fixtures: captured real updates the decoder must reject", () => {
+  if (capturedReject.length) {
+    it.each(capturedReject)("real bytes carrying an unhandled property are rejected: $name", ({ data }) => {
+      trustAll();
+      expect(decode(hexToBytes(data.evmHex))).toBeErr(Cl.uint(data.expectErr));
+    });
+  } else {
+    it("no captured-reject fixtures yet", () => {});
+  }
 });
 
 describe("fixtures: generated/pass (must decode to its spec)", () => {
