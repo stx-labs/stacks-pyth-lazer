@@ -1,9 +1,4 @@
 {
-  "description": "real update carrying feed-update-timestamp (12); decoder fails closed",
-  "expectErr": 2205,
-  "rejectedTypesPresent": [
-    12
-  ],
   "channel": 4,
   "timestampUs": "1782911068000000",
   "parsed": {
