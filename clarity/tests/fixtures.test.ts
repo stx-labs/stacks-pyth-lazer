@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Cl } from "@stacks/transactions";
+import { Cl, type ClarityValue } from "@stacks/transactions";
 import { hexToBytes } from "@noble/hashes/utils";
 import { readdirSync, readFileSync } from "node:fs";
 import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, type FeedSpec } from "./helpers";
@@ -246,7 +246,7 @@ function expectedFeedFromSpec(f: any) {
     const v = resolved.get(field);
     return v == null ? Cl.none() : Cl.some(kind === "int" ? Cl.int(v) : Cl.uint(v));
   };
-  const fields: Record<string, ReturnType<typeof Cl.uint>> = {
+  const fields: Record<string, ClarityValue> = {
     "feed-id": Cl.uint(f.id),
     price: Cl.int(resolved.get("price")!),
     exponent: Cl.int(resolved.get("exponent")!),
