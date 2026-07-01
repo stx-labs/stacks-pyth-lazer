@@ -13,11 +13,6 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 //       must decode to `parsed` (Pyth's own SDK decode). Replayed in publish-time
 //       order to exercise storage's monotonic guard.
 //
-//   fixtures/captured-reject/<timestampUs>.json   REAL updates carrying a property the
-//       decoder fails closed on (variable-length existence-byte types: funding 6/7/8,
-//       feed-update-timestamp 12). Same shape + { description, expectErr } -- evmHex must
-//       be REJECTED with expectErr (they cannot decode, so they are not replayed).
-//
 //   fixtures/generated/pass/<name>.json    synthetic specs that MUST decode
 //   fixtures/generated/fail/<name>.json    synthetic specs that MUST be rejected
 //       { description, channel, timestampUs, feeds: [{ id, props: [[type, dec-str]] }],
@@ -63,7 +58,6 @@ function load(rel: string): Fixture[] {
 }
 
 const captured = load("captured");
-const capturedReject = load("captured-reject");
 const genPass = load("generated/pass");
 const genFail = load("generated/fail");
 
@@ -94,7 +88,9 @@ const big = (v: string | number | null | undefined) => (v === null || v === unde
 
 // Extended props the decoder parses. Pyth serializes market-session as a label; the decoder
 // stores the numeric enum and always keeps it (0 = regular is a real value, not a sentinel).
-// ema-price/ema-confidence mirror the decoder's some-if-nonzero collapse (0 -> none).
+// ema-price/ema-confidence mirror the decoder's some-if-nonzero collapse (0 -> none). funding-*
+// and feed-update-timestamp are existence-flagged: the SDK omits them when absent (-> none) and
+// emits the value when present, which optInt/optUint(big(...)) maps straight through.
 const SESSION_TO_INT: Record<string, bigint> = { regular: 0n };
 const sessionOpt = (v: string | number | null | undefined) => {
   if (v === null || v === undefined) return Cl.none();
@@ -121,13 +117,13 @@ const capturedFeed = (f: any) =>
     "publisher-count": Cl.uint(BigInt(f.publisherCount)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
-    "funding-rate": Cl.none(),
-    "funding-timestamp": Cl.none(),
-    "funding-rate-interval": Cl.none(),
+    "funding-rate": optInt(big(f.fundingRate)),
+    "funding-timestamp": optUint(big(f.fundingTimestamp)),
+    "funding-rate-interval": optUint(big(f.fundingRateInterval)),
     "market-session": sessionOpt(f.marketSession),
     "ema-price": nonzeroIntOpt(f.emaPrice),
     "ema-confidence": nonzeroUintOpt(f.emaConfidence),
-    "feed-update-timestamp": Cl.none(),
+    "feed-update-timestamp": optUint(big(f.feedUpdateTimestamp)),
   });
 
 const capturedDecode = (c: any) =>
@@ -146,13 +142,13 @@ const capturedStored = (f: any, c: any) =>
     confidence: optUint(big(f.confidence)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
-    "funding-rate": Cl.none(),
-    "funding-timestamp": Cl.none(),
-    "funding-rate-interval": Cl.none(),
+    "funding-rate": optInt(big(f.fundingRate)),
+    "funding-timestamp": optUint(big(f.fundingTimestamp)),
+    "funding-rate-interval": optUint(big(f.fundingRateInterval)),
     "market-session": sessionOpt(f.marketSession),
     "ema-price": nonzeroIntOpt(f.emaPrice),
     "ema-confidence": nonzeroUintOpt(f.emaConfidence),
-    "feed-update-timestamp": Cl.none(),
+    "feed-update-timestamp": optUint(big(f.feedUpdateTimestamp)),
     "publish-time": Cl.uint(BigInt(c.timestampUs)),
     channel: Cl.uint(c.channel),
   });
@@ -327,17 +323,6 @@ describe("fixtures: captured real Lazer updates", () => {
     // stored at a >= publish-time), leaving the count at zero.
     expect(submit(hexToBytes(seq[0].evmHex))).toBeOk(Cl.uint(0));
   });
-});
-
-describe("fixtures: captured real updates the decoder must reject", () => {
-  if (capturedReject.length) {
-    it.each(capturedReject)("real bytes carrying an unhandled property are rejected: $name", ({ data }) => {
-      trustAll();
-      expect(decode(hexToBytes(data.evmHex))).toBeErr(Cl.uint(data.expectErr));
-    });
-  } else {
-    it("no captured-reject fixtures yet", () => {});
-  }
 });
 
 describe("fixtures: generated/pass (must decode to its spec)", () => {
