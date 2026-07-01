@@ -389,23 +389,31 @@
 			(some (bit-shift-right (bit-shift-left (buff-to-int-be (unwrap! (as-max-len? b u16) none)) shift) shift)))
 		none))
 
-;; Read optional int64. If first bytes is...
+;; Read optional int64. If first byte is...
 ;;   - 0 => `none`, do not parse more bytes
 ;;   - non-zero => `(some next-8-bytes-as-int64)`
 (define-private (read-opt-int64 (bytes (buff 8192)) (voffset uint))
 	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
-		(ok { value: none, next: (+ voffset u1) })
+		(ok {
+			value: none,
+			next: (+ voffset u1)
+		})
 		(ok {
 			value: (some (unwrap! (read-int-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
-			next: (+ voffset u9) })))
+			next: (+ voffset u9)
+		})))
 
-;; Read optional uint64. If first bytes is...
+;; Read optional uint64. If first byte is...
 ;;   - 0 => `none`, do not parse more bytes
 ;;   - non-zero => `(some next-8-bytes-as-uint64)`
 (define-private (read-opt-uint64 (bytes (buff 8192)) (voffset uint))
 	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
-		(ok { value: none, next: (+ voffset u1) })
+		(ok {
+			value: none,
+			next: (+ voffset u1)
+		})
 		(ok {
 			value: (some (unwrap! (read-uint-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
-			next: (+ voffset u9) })))
+			next: (+ voffset u9)
+		})))
 

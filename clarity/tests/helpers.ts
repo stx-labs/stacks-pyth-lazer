@@ -73,8 +73,8 @@ const PROP_WIDTH: Record<number, number> = {
 };
 const PROP_SIGNED: Record<number, boolean> = { 0: true, 1: true, 2: true, 4: true, 6: true, 10: true };
 
-// Existence-flagged properties: a 1-byte flag, then an 8-byte value only when nonzero. In a
-// FeedSpec, `null` encodes absent (flag 0); any bigint encodes present (flag 1 + value, incl. 0).
+// Existence-flagged properties: a 1-byte flag, then an 8-byte value only when the flag is nonzero.
+// In a FeedSpec, `null` encodes absent (flag 0); any bigint encodes present (flag 1 + value, incl. 0).
 const EXISTENCE_FLAGGED = new Set([6, 7, 8, 12]);
 const EXISTENCE_VALUE_WIDTH = 8;
 
