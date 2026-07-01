@@ -1,12 +1,12 @@
 // Capture REAL Pyth Lazer `evm` updates from the live API and save them as golden
 // fixtures. Run with the access token from .env (never hard-code or log it):
 //
-//   node --env-file=.env scripts/gen-lazer-fixture.mjs
+//   node --env-file=.env scripts/capture-base-properties.mjs
 //
 // Capture more, spaced out (one roughly every 90s) for temporal spread:
 //
 //   LAZER_CAPTURE_COUNT=12 LAZER_CAPTURE_STAGGER_MS=90000 \
-//     node --env-file=.env scripts/gen-lazer-fixture.mjs
+//     node --env-file=.env scripts/capture-base-properties.mjs
 //
 // Output:
 //   tests/fixtures/captured/<timestampUs>.json   one file per update (raw evm hex +
@@ -19,16 +19,9 @@
 //
 // The captured fixtures contain only public price data + signatures -- no token.
 import { writeFileSync, mkdirSync } from "node:fs";
-import { PythLazerClient } from "@pythnetwork/pyth-lazer-sdk";
-import { secp256k1 } from "@noble/curves/secp256k1";
-import { keccak_256 } from "@noble/hashes/sha3";
-import { hexToBytes, bytesToHex } from "@noble/hashes/utils";
+import { requireToken, createLazerClient, recoverSigner, hasEvmMagic, hexToBytes } from "./lib/lazer.mjs";
 
-const TOKEN = process.env.PYTH_API_KEY;
-if (!TOKEN) {
-  console.error("PYTH_API_KEY not set. Run: node --env-file=.env scripts/gen-lazer-fixture.mjs");
-  process.exit(1);
-}
+const TOKEN = requireToken();
 
 const FEEDS = { 1: "Crypto.BTC/USD", 2: "Crypto.ETH/USD", 6: "Crypto.SOL/USD" };
 const PROPERTIES = ["price", "exponent", "confidence", "bestBidPrice", "bestAskPrice", "publisherCount"];
@@ -43,32 +36,7 @@ const OUT_DIR = "tests/fixtures/captured";
 // Enough wall-clock for the whole staggered run (the first update is immediate) + buffer.
 const TIMEOUT_MS = TARGET_UPDATES * STAGGER_MS + 60_000;
 
-// Recover the secp256k1 signer of one `evm` update (magic|r|s|recid|len|payload).
-// Returns the 33-byte compressed pubkey our governance keys on, or null if the
-// envelope is not the single-signature evm shape we expect.
-function recoverSigner(evmHex) {
-  const u = hexToBytes(evmHex.replace(/^0x/, ""));
-  const magic = (u[0] << 24) | (u[1] << 16) | (u[2] << 8) | u[3];
-  if ((magic >>> 0) !== 0x2a22999a) return { error: `unexpected magic 0x${(magic >>> 0).toString(16)}` };
-  const r = u.slice(4, 36), s = u.slice(36, 68), recid = u[68];
-  const payloadLen = (u[69] << 8) | u[70];
-  const payload = u.slice(71, 71 + payloadLen);
-  const sig = secp256k1.Signature.fromCompact(bytesToHex(r) + bytesToHex(s)).addRecoveryBit(recid);
-  const pub = sig.recoverPublicKey(keccak_256(payload));
-  const ethAddr = bytesToHex(keccak_256(pub.toRawBytes(false).slice(1)).slice(12));
-  return { compressed: bytesToHex(pub.toRawBytes(true)), ethAddr, payloadLen, magicOk: true };
-}
-
-const client = await PythLazerClient.create({
-  token: TOKEN,
-  webSocketPoolConfig: {
-    urls: [
-      "wss://pyth-lazer-0.dourolabs.app/v1/stream",
-      "wss://pyth-lazer-1.dourolabs.app/v1/stream",
-      "wss://pyth-lazer-2.dourolabs.app/v1/stream",
-    ],
-  },
-});
+const client = await createLazerClient(TOKEN);
 
 const captured = [];
 let lastCaptureMs = 0;
@@ -116,13 +84,12 @@ function finish() {
   // Recover the production signer from the first evm update.
   const firstEvm = captured.find((u) => u.evmHex)?.evmHex;
   if (firstEvm) {
-    const r = recoverSigner(firstEvm);
+    const evm = hexToBytes(firstEvm.replace(/^0x/, ""));
+    const { compressed, ethAddr } = recoverSigner(evm);
     console.log("\nProduction signer (from real update):");
-    console.log(`  evm prefix: ${firstEvm.replace(/^0x/, "").slice(0, 8)}  ${r.magicOk ? "(evm magic OK)" : "!! " + r.error}`);
-    if (r.compressed) {
-      console.log(`  compressed pubkey: 0x${r.compressed}`);
-      console.log(`  eth address:       0x${r.ethAddr}`);
-    }
+    console.log(`  evm prefix: ${firstEvm.replace(/^0x/, "").slice(0, 8)}  ${hasEvmMagic(evm) ? "(evm magic OK)" : "!! unexpected magic"}`);
+    console.log(`  compressed pubkey: 0x${compressed}`);
+    console.log(`  eth address:       0x${ethAddr}`);
   }
 
   client.shutdown();

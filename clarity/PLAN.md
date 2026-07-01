@@ -548,7 +548,7 @@ Each phase is independently reviewable/mergeable.
     `tests/pyth-lazer-golden-fixture.test.ts` decodes an upstream `PythLazer.t.sol` v0.1.1 vector
     end-to-end (envelope + secp256k1 recovery + big-endian payload) to Pyth's own asserted values.
   - ✅ **Storage schema finalized** (resolves the storage `DO NOT SHIP` FIXME). Live BTC/ETH/SOL
-    `evm` updates captured via `scripts/gen-lazer-fixture.mjs` + `pyth-lazer-protocol`'s
+    `evm` updates captured via `scripts/capture-base-properties.mjs` + `pyth-lazer-protocol`'s
     `AggregatedPriceFeedData` set the optional/required split: REQUIRED `price` (oracle SKIPS a
     price-less feed -- partial success -- rather than rejecting), `exponent`, `publisher-count`
     (the two protocol non-`Option` fields); OPTIONAL `confidence`, `best-bid`, `best-ask`, `ema-*`,

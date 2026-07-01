@@ -1,0 +1,89 @@
+{
+  "channel": 4,
+  "timestampUs": "1782911061000000",
+  "parsed": {
+    "timestampUs": "1782911061000000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 1,
+        "price": "5860022352985",
+        "bestBidPrice": "5860007941310",
+        "bestAskPrice": "5860272626245",
+        "publisherCount": 19,
+        "exponent": -8,
+        "confidence": 2455523789,
+        "marketSession": "regular",
+        "emaPrice": "5860034800000",
+        "emaConfidence": 2162490610
+      },
+      {
+        "priceFeedId": 2,
+        "price": "157150554383",
+        "bestBidPrice": "157146683865",
+        "bestAskPrice": "157153585707",
+        "publisherCount": 20,
+        "exponent": -8,
+        "confidence": 63337647,
+        "marketSession": "regular",
+        "emaPrice": "156918724000",
+        "emaConfidence": 50801098
+      },
+      {
+        "priceFeedId": 6,
+        "price": "7478252937",
+        "bestBidPrice": "7477753555",
+        "bestAskPrice": "7478736969",
+        "publisherCount": 17,
+        "exponent": -8,
+        "confidence": 1116489,
+        "marketSession": "regular",
+        "emaPrice": "7459537400",
+        "emaConfidence": 1369307
+      },
+      {
+        "priceFeedId": 673,
+        "price": "120208174",
+        "bestAskPrice": "120208175",
+        "publisherCount": 7,
+        "exponent": -8,
+        "confidence": 1,
+        "marketSession": "regular",
+        "emaPrice": "120202019",
+        "emaConfidence": 1
+      },
+      {
+        "priceFeedId": 3065,
+        "price": "625190000",
+        "publisherCount": 4,
+        "exponent": -8,
+        "confidence": 1,
+        "marketSession": "regular",
+        "emaPrice": "625074580",
+        "emaConfidence": 1
+      },
+      {
+        "priceFeedId": 1575,
+        "price": "11017166000000",
+        "bestBidPrice": "11017165999950",
+        "bestAskPrice": "11017166000050",
+        "publisherCount": 4,
+        "exponent": -10,
+        "confidence": 50,
+        "marketSession": "regular",
+        "emaPrice": "11015443800000",
+        "emaConfidence": 50
+      },
+      {
+        "priceFeedId": 1831,
+        "price": "1112998200",
+        "publisherCount": 5,
+        "exponent": -8,
+        "confidence": 1,
+        "marketSession": "regular",
+        "emaPrice": "1112911280",
+        "emaConfidence": 1
+      }
+    ]
+  },
+  "evmHex": "2a22999aed1383f247c227383079943bb43a03873c64eaa0dcd984f52e5dfc5ccefb0a2f4b43ad2e1291f8028d6468d2ad76b54ffc2e36b3f17b1c47117e1bbeb053f6720001ea93c7d3750006558c5474ff40040700000001090000000554648cfc59010000055463b114be02000005547377da4503001304fff80500000000925c51cd0900000a00000554654ae9800b0000000080e4fcf20000000209000000002496e7290f010000002496ac19d9020000002497156a2b03001404fff8050000000003c674af0900000a000000248915b5a00b00000000030729ca00000006090000000001bdbd15890100000001bdb576d30200000001bdc4784903001104fff80500000000001109490900000a00000001bc9f81f80b000000000014e4db000002a1090000000000072a3b2e0100000000000000000200000000072a3b2f03000704fff80500000000000000010900000a00000000072a23230b000000000000000100000bf90900000000002543a47001000000000000000002000000000000000003000404fff80500000000000000010900000a000000002541e1940b000000000000000100000627090000000a0522440f800100000a0522440f4e0200000a0522440fb203000404fff60500000000000000320900000a00000a04bb9d5fc00b0000000000000032000007270900000000004257013801000000000000000002000000000000000003000504fff80500000000000000010900000a000000004255adb00b0000000000000001"
+}
