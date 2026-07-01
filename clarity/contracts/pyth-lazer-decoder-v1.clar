@@ -269,23 +269,6 @@
 (define-private (some-if-nonzero-int (v int)) (if (is-eq v 0) none (some v)))
 (define-private (some-if-nonzero-uint (v uint)) (if (is-eq v u0) none (some v)))
 
-;; Existence-flagged value: a 1-byte flag, then the 8-byte value only when the flag is nonzero.
-;; The flag (not the value) signals presence, so a present 0 stays `(some 0)`, unlike the base
-;; props above. Returns the value and the offset past it (advances 1 byte if absent, 9 if present).
-(define-private (read-opt-int64 (bytes (buff 8192)) (voffset uint))
-	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
-		(ok { value: none, next: (+ voffset u1) })
-		(ok {
-			value: (some (unwrap! (read-int-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
-			next: (+ voffset u9) })))
-
-(define-private (read-opt-uint64 (bytes (buff 8192)) (voffset uint))
-	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
-		(ok { value: none, next: (+ voffset u1) })
-		(ok {
-			value: (some (unwrap! (read-uint-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
-			next: (+ voffset u9) })))
-
 ;; Read one property and advance cursor past it
 ;; Handles all types declared as `PROP_*` constants, errors on unsupported properties
 ;; Maps 0 -> `none` for some fields
@@ -405,3 +388,24 @@
 			;; Sign-extend an N-byte two's-complement value: shift the sign bit to bit 127 and back.
 			(some (bit-shift-right (bit-shift-left (buff-to-int-be (unwrap! (as-max-len? b u16) none)) shift) shift)))
 		none))
+
+;; Read optional int64. If first bytes is...
+;;   - 0 => `none`, do not parse more bytes
+;;   - non-zero => `(some next-8-bytes-as-int64)`
+(define-private (read-opt-int64 (bytes (buff 8192)) (voffset uint))
+	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
+		(ok { value: none, next: (+ voffset u1) })
+		(ok {
+			value: (some (unwrap! (read-int-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
+			next: (+ voffset u9) })))
+
+;; Read optional uint64. If first bytes is...
+;;   - 0 => `none`, do not parse more bytes
+;;   - non-zero => `(some next-8-bytes-as-uint64)`
+(define-private (read-opt-uint64 (bytes (buff 8192)) (voffset uint))
+	(if (is-eq (unwrap! (read-uint-be? bytes voffset u1) ERR_INVALID_FEED_DATA) u0)
+		(ok { value: none, next: (+ voffset u1) })
+		(ok {
+			value: (some (unwrap! (read-uint-be? bytes (+ voffset u1) u8) ERR_INVALID_FEED_DATA)),
+			next: (+ voffset u9) })))
+

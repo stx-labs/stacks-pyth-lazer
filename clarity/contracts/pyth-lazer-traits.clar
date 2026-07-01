@@ -10,6 +10,7 @@
 			timestamp: uint,
 			channel: uint,
 			price-feeds: (list 16 {
+				;; Full Lazer property set
 				feed-id: uint,
 				price: int,
 				exponent: int,
@@ -17,8 +18,6 @@
 				confidence: (optional uint),
 				best-bid: (optional int),
 				best-ask: (optional int),
-				;; Full Lazer property set, all populated by the v1 decoder. The trait carries every
-				;; field so a swapped-in decoder can change coverage without reshaping this interface.
 				funding-rate: (optional int),
 				funding-timestamp: (optional uint),
 				funding-rate-interval: (optional uint),
