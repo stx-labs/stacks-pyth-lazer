@@ -20,9 +20,14 @@ export const PairsRoutes: FastifyPluginCallback<
     },
     async (request, reply) => {
       // TODO: Improve this endpoint depending on partner API design
-      config.priceMonitor.requestPriceUpdate(request.body.symbol);
+      const accepted = config.pythSymbolMonitor.requestPriceUpdate(request.body.symbol);
+      if (!accepted) {
+        return reply.status(400).send({
+          error: `Unknown or unsupported Pyth Lazer symbol: ${request.body.symbol}`,
+        });
+      }
       return reply.status(200).send({
-        message: 'Price update received',
+        message: 'Price update requested',
       });
     }
   );

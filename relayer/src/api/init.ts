@@ -8,8 +8,7 @@ import type { PythSymbolMonitor } from '../relayer/pyth-symbol-monitor.ts';
 
 /** Configuration for the API service. */
 export interface ApiConfig {
-  /** Price monitor instance. */
-  priceMonitor: PythSymbolMonitor;
+  pythSymbolMonitor: PythSymbolMonitor;
 }
 
 export const Api: FastifyPluginAsync<ApiConfig, Server, TypeBoxTypeProvider> = async (

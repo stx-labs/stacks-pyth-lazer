@@ -44,10 +44,10 @@ async function initBackgroundServices(config: ApiConfig) {
     name: 'Pyth Price Monitor',
     forceKillable: true,
     handler: async () => {
-      await config.priceMonitor.stop();
+      await config.pythSymbolMonitor.stop();
     },
   });
-  await config.priceMonitor.start((evm, parsed) => planner.handlePriceMonitorPayload(evm, parsed));
+  await config.pythSymbolMonitor.start((evm, parsed) => planner.handlePriceMonitorPayload(evm, parsed));
 }
 
 /**
@@ -77,7 +77,7 @@ async function initApp() {
     numConnections: ENV.PYTH_CLIENT_NUM_CONNECTIONS,
   });
   const config: ApiConfig = {
-    priceMonitor,
+    pythSymbolMonitor: priceMonitor,
   };
   await initBackgroundServices(config);
   await initApiService(config);

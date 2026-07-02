@@ -12,10 +12,14 @@ interface FakeClient {
   addMessageListener: ReturnType<typeof mock.fn>;
   addAllConnectionsDownListener: ReturnType<typeof mock.fn>;
   addConnectionRestoredListener: ReturnType<typeof mock.fn>;
+  getSymbols: ReturnType<typeof mock.fn>;
   shutdown: ReturnType<typeof mock.fn>;
   /** The message handler the monitor registered via `addMessageListener`. */
   listener?: (event: unknown) => void;
 }
+
+/** Symbols the fake catalog reports as valid; tests may extend it. */
+let catalogSymbols: string[] = [];
 
 function makeFakeClient(): FakeClient {
   const client: FakeClient = {
@@ -26,6 +30,11 @@ function makeFakeClient(): FakeClient {
     }),
     addAllConnectionsDownListener: mock.fn(),
     addConnectionRestoredListener: mock.fn(),
+    // The monitor loads this at start() to validate symbols; `symbol` mirrors
+    // `name` here so either identifier form resolves.
+    getSymbols: mock.fn(async () =>
+      catalogSymbols.map(name => ({ name, symbol: name }))
+    ),
     shutdown: mock.fn(),
   };
   return client;
@@ -74,6 +83,12 @@ describe('PythSymbolMonitor', () => {
   beforeEach(() => {
     lastClient = undefined;
     createFn.mock.resetCalls();
+    // Broad catalog so the symbols the tests subscribe to validate as known.
+    catalogSymbols = [
+      ...DEFAULT_SYMBOLS,
+      'Crypto.ETH/USD',
+      ...Array.from({ length: 20 }, (_, i) => `Crypto.SYM${i}/USD`),
+    ];
   });
 
   afterEach(() => {
@@ -100,6 +115,7 @@ describe('PythSymbolMonitor', () => {
     assert.equal(request.deliveryFormat, 'binary');
     assert.equal(request.parsed, true);
     assert.equal(request.channel, 'fixed_rate@200ms');
+    assert.equal(request.ignoreInvalidFeedIds, true, 'backstop against one bad symbol');
   });
 
   test('registers connection listeners on start', async () => {
@@ -126,7 +142,7 @@ describe('PythSymbolMonitor', () => {
   test('requestPriceUpdate adds a new symbol and re-subscribes with the full set', async () => {
     const { monitor, client } = await startMonitor();
 
-    monitor.requestPriceUpdate('Crypto.ETH/USD');
+    assert.equal(monitor.requestPriceUpdate('Crypto.ETH/USD'), true);
 
     // Re-subscription tears down the old subscription first, then re-subscribes.
     assert.equal(client.unsubscribe.mock.callCount(), 1);
@@ -138,10 +154,60 @@ describe('PythSymbolMonitor', () => {
   test('requestPriceUpdate is a no-op for an already-monitored symbol', async () => {
     const { monitor, client } = await startMonitor();
 
-    monitor.requestPriceUpdate('Crypto.BTC/USD'); // already a default
+    assert.equal(monitor.requestPriceUpdate('Crypto.BTC/USD'), true); // already a default
 
     assert.equal(client.subscribe.mock.callCount(), 1, 'no re-subscribe');
     assert.equal(client.unsubscribe.mock.callCount(), 0);
+  });
+
+  test('requestPriceUpdate rejects a symbol not in the catalog', async () => {
+    const { monitor, client } = await startMonitor();
+
+    const accepted = monitor.requestPriceUpdate('Crypto.NOPE/USD');
+
+    assert.equal(accepted, false);
+    assert.equal(client.subscribe.mock.callCount(), 1, 'subscription untouched');
+    assert.ok(!lastSubscribeArg(client).symbols.includes('Crypto.NOPE/USD'));
+  });
+
+  test('accepts any symbol when the catalog fails to load (fails open)', async () => {
+    const client = makeFakeClient();
+    client.getSymbols.mock.mockImplementation(async () => {
+      throw new Error('catalog unavailable');
+    });
+    createFn.mock.mockImplementationOnce(async () => {
+      lastClient = client;
+      return client;
+    });
+
+    const monitor = new PythSymbolMonitor(OPTS);
+    await monitor.start();
+
+    // Validation disabled -> the relayer is not blocked by a missing catalog.
+    assert.equal(monitor.requestPriceUpdate('Crypto.ANYTHING/USD'), true);
+  });
+
+  test('evicts feeds Lazer reports as invalid via the subscription ack', async () => {
+    const { monitor, client } = await startMonitor();
+
+    client.listener?.({
+      type: 'json',
+      value: {
+        type: 'subscribedWithInvalidFeedIdsIgnored',
+        subscriptionId: SUBSCRIPTION_ID,
+        subscribedFeedIds: [],
+        ignoredInvalidFeedIds: {
+          unknownSymbols: ['Crypto.STX/USD'],
+          unknownIds: [],
+          unsupportedChannels: [],
+          unstable: [],
+        },
+      },
+    });
+
+    // Trigger a re-subscribe and confirm the evicted symbol is gone from the set.
+    monitor.requestPriceUpdate('Crypto.ETH/USD');
+    assert.ok(!lastSubscribeArg(client).symbols.includes('Crypto.STX/USD'));
   });
 
   test('caps the monitored set at 16 symbols, evicting least-recently-used', async () => {

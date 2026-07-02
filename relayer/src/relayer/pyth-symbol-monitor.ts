@@ -4,6 +4,7 @@ import {
   type Channel,
   type JsonOrBinaryResponse,
   type ParsedPayload,
+  type Response as LazerControlMessage,
 } from '@pythnetwork/pyth-lazer-sdk';
 import { LRUCache } from 'lru-cache';
 
@@ -20,6 +21,9 @@ const MAX_PRICE_FEEDS = 16;
  * message (submittable in one tx). This is its fixed id.
  */
 const SUBSCRIPTION_ID = 1;
+
+/** How often to refresh the cached symbol catalog used to validate new pairs. */
+const CATALOG_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
 
 /**
  * Default price feed symbols to subscribe to. New pairs will be added to the subscription on
@@ -73,6 +77,14 @@ export class PythSymbolMonitor {
   private readonly symbolCache: LRUCache<string, boolean>;
   /** Optional consumer of each update (e.g. the relaying heuristic). */
   private onPayload?: PythPricePayloadHandler;
+  /**
+   * Valid Lazer symbols (both `name` and `symbol` forms), loaded from the catalog at `start()`.
+   * `undefined` means the catalog is unavailable, in which case validation fails open (accepts)
+   * rather than blocking the relayer.
+   */
+  private validSymbols?: Set<string>;
+  /** Periodic catalog-refresh timer. */
+  private catalogTimer?: ReturnType<typeof setInterval>;
 
   constructor(opts: { channel: string; apiKey: string; numConnections: number }) {
     this.channel = parsePythLazerChannel(opts.channel);
@@ -128,8 +140,35 @@ export class PythSymbolMonitor {
       logger.info(`${this.constructor.name} Pyth Lazer connection restored`);
     });
 
+    // Load the Pyth symbol catalog so `requestPriceUpdate` can validate new pairs, and keep it
+    // fresh (feeds get added/removed over time).
+    await this.loadSymbolCatalog();
+    this.catalogTimer = setInterval(() => {
+      void this.loadSymbolCatalog();
+    }, CATALOG_REFRESH_INTERVAL_MS);
+    this.catalogTimer.unref?.(); // don't keep the process alive for the refresh
+
     // Subscribe to every symbol queued before the client connected.
     this.refreshSubscription();
+  }
+
+  /**
+   * Loads the Lazer symbol catalog into {@link validSymbols}. Fails open: on error the set is left
+   * as-is so symbol validation never blocks the relayer.
+   */
+  private async loadSymbolCatalog(): Promise<void> {
+    if (!this.pythClient) return;
+    try {
+      const catalog = await this.pythClient.getSymbols();
+      // Accept either identifier form; we validate the literal string we subscribe with.
+      this.validSymbols = new Set(catalog.flatMap(entry => [entry.name, entry.symbol]));
+      logger.info(
+        { count: this.validSymbols.size },
+        `${this.constructor.name} loaded Pyth Lazer symbol catalog`
+      );
+    } catch (error) {
+      logger.error(error, `${this.constructor.name} failed to load symbol catalog`);
+    }
   }
 
   /** The most recent parsed payload (all feeds) seen on the subscription, if any. */
@@ -141,6 +180,10 @@ export class PythSymbolMonitor {
    * Tears down the connection pool. Safe to call when not started.
    */
   async stop(): Promise<void> {
+    if (this.catalogTimer) {
+      clearInterval(this.catalogTimer);
+      this.catalogTimer = undefined;
+    }
     if (!this.pythClient) return;
     this.pythClient.shutdown();
     this.pythClient = undefined;
@@ -149,16 +192,32 @@ export class PythSymbolMonitor {
   }
 
   /**
-   * Requests live updates for a pair on behalf of an external caller. Adds the
-   * pair to the LRU cache (evicting the least-recently-used pair if at capacity)
-   * and refreshes the subscription. If the pair is already monitored this only
-   * bumps its recency in the cache and leaves the subscription unchanged.
+   * Requests live updates for a pair on behalf of an external caller. Adds the pair to the LRU
+   * cache (evicting the least-recently-used pair if at capacity) and refreshes the subscription. If
+   * the pair is already monitored this only bumps its recency in the cache and leaves the
+   * subscription unchanged.
    * @param symbol - Pyth Lazer symbol, e.g. `Crypto.BTC/USD`.
+   * @returns `false` if the symbol is not in the Lazer catalog (rejected without
+   *   touching the subscription); `true` if it is now monitored.
    */
-  requestPriceUpdate(symbol: string): void {
-    if (this.symbolCache.get(symbol)) return; // already monitored; bumps recency
+  requestPriceUpdate(symbol: string): boolean {
+    if (!this.isKnownSymbol(symbol)) {
+      logger.warn(`${this.constructor.name} rejecting unknown symbol ${symbol}`);
+      return false;
+    }
+    if (this.symbolCache.get(symbol)) return true; // already monitored; bumps recency
     this.symbolCache.set(symbol, true);
     this.refreshSubscription();
+    return true;
+  }
+
+  /**
+   * Whether a symbol is in the Lazer catalog. Fails open (accepts) when the catalog has not been
+   * loaded yet — e.g. seeding defaults before `start()`.
+   * @param symbol - Pyth Lazer symbol to check.
+   */
+  private isKnownSymbol(symbol: string): boolean {
+    return this.validSymbols === undefined || this.validSymbols.has(symbol);
   }
 
   /**
@@ -196,6 +255,10 @@ export class PythSymbolMonitor {
       formats: ['evm'],
       deliveryFormat: 'binary',
       parsed: true,
+      // Backstop: never let one bad symbol fail the whole subscription. Lazer subscribes to the
+      // valid feeds and reports the rest via `subscribedWithInvalidFeedIdsIgnored`, which we evict
+      // in `handleMessage`.
+      ignoreInvalidFeedIds: true,
       channel: this.channel,
     });
     this.subscribed = true;
@@ -205,10 +268,48 @@ export class PythSymbolMonitor {
     );
   }
 
+  /**
+   * Handles a JSON control message (subscription ack / error) from Lazer.
+   * @param message - The parsed control response.
+   */
+  private handleControlMessage(message: LazerControlMessage): void {
+    switch (message.type) {
+      case 'subscribedWithInvalidFeedIdsIgnored': {
+        // Lazer accepted the valid feeds and skipped these. Drop them so they
+        // don't ride along in every future `refreshSubscription`.
+        const { unknownSymbols, unknownIds } = message.ignoredInvalidFeedIds;
+        logger.warn(
+          { subscriptionId: message.subscriptionId, unknownSymbols, unknownIds },
+          `${this.constructor.name} Lazer ignored invalid feeds; evicting them`
+        );
+        for (const symbol of unknownSymbols) this.symbolCache.delete(symbol);
+        break;
+      }
+      case 'error':
+        logger.error({ error: message.error }, `${this.constructor.name} Lazer stream error`);
+        this.subscribed = false;
+        break;
+      case 'subscriptionError':
+        logger.error(
+          { subscriptionId: message.subscriptionId, error: message.error },
+          `${this.constructor.name} Lazer subscription error`
+        );
+        if (message.subscriptionId === SUBSCRIPTION_ID) this.subscribed = false;
+        break;
+      case 'subscribed':
+        logger.info(
+          { subscriptionId: message.subscriptionId },
+          `${this.constructor.name} Lazer subscription confirmed`
+        );
+        break;
+      default:
+        logger.debug({ value: message }, `${this.constructor.name} received json message`);
+    }
+  }
+
   private readonly handleMessage = (event: JsonOrBinaryResponse): void => {
     if (event.type !== 'binary') {
-      // JSON control/error responses (subscription acks, etc.).
-      logger.debug({ value: event.value }, `${this.constructor.name} received json message`);
+      this.handleControlMessage(event.value);
       return;
     }
 
