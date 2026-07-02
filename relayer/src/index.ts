@@ -75,6 +75,7 @@ async function initApp() {
     channel: ENV.PYTH_LAZER_CHANNEL,
     apiKey: ENV.PYTH_API_KEY,
     numConnections: ENV.PYTH_CLIENT_NUM_CONNECTIONS,
+    catalogRefreshMs: ENV.PYTH_CATALOG_REFRESH_MS,
   });
   const config: ApiConfig = {
     pythSymbolMonitor: priceMonitor,

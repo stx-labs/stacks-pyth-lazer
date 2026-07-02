@@ -22,9 +22,6 @@ const MAX_PRICE_FEEDS = 16;
  */
 const SUBSCRIPTION_ID = 1;
 
-/** How often to refresh the cached symbol catalog used to validate new pairs. */
-const CATALOG_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
-
 /**
  * Default price feed symbols to subscribe to. New pairs will be added to the subscription on
  * demand.
@@ -69,6 +66,7 @@ export class PythSymbolMonitor {
   private readonly channel: Channel;
   private readonly apiKey: string;
   private readonly numConnections: number;
+  private readonly catalogRefreshMs: number;
   /** Whether the single subscription is currently active on the stream. */
   private subscribed = false;
   /** Most recent parsed payload (all feeds) seen on the subscription, if any. */
@@ -86,10 +84,16 @@ export class PythSymbolMonitor {
   /** Periodic catalog-refresh timer. */
   private catalogTimer?: ReturnType<typeof setInterval>;
 
-  constructor(opts: { channel: string; apiKey: string; numConnections: number }) {
+  constructor(opts: {
+    channel: string;
+    apiKey: string;
+    numConnections: number;
+    catalogRefreshMs: number;
+  }) {
     this.channel = parsePythLazerChannel(opts.channel);
     this.apiKey = opts.apiKey;
     this.numConnections = opts.numConnections;
+    this.catalogRefreshMs = opts.catalogRefreshMs;
     this.symbolCache = new LRUCache<string, boolean>({
       max: MAX_PRICE_FEEDS,
       dispose: (_value, symbol) => {
@@ -145,7 +149,7 @@ export class PythSymbolMonitor {
     await this.loadSymbolCatalog();
     this.catalogTimer = setInterval(() => {
       void this.loadSymbolCatalog();
-    }, CATALOG_REFRESH_INTERVAL_MS);
+    }, this.catalogRefreshMs);
     this.catalogTimer.unref?.(); // don't keep the process alive for the refresh
 
     // Subscribe to every symbol queued before the client connected.

@@ -58,7 +58,12 @@ const { PythSymbolMonitor } = await import('../src/relayer/pyth-symbol-monitor.t
 const DEFAULT_SYMBOLS = ['Crypto.BTC/USD', 'Crypto.STX/USD', 'Crypto.USDC/USD'];
 const SUBSCRIPTION_ID = 1;
 
-const OPTS = { channel: 'fixed_rate_200ms', apiKey: 'test-key', numConnections: 2 };
+const OPTS = {
+  channel: 'fixed_rate_200ms',
+  apiKey: 'test-key',
+  numConnections: 2,
+  catalogRefreshMs: 3_600_000,
+};
 
 /** Build, start, and return a monitor along with its fake client + payload spy. */
 async function startMonitor(opts: Partial<typeof OPTS> = {}) {
