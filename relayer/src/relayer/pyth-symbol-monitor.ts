@@ -67,6 +67,7 @@ export class PythSymbolMonitor {
   private readonly apiKey: string;
   private readonly numConnections: number;
   private readonly catalogRefreshMs: number;
+  private readonly refreshDebounceMs: number;
   /** Whether the single subscription is currently active on the stream. */
   private subscribed = false;
   /** Most recent parsed payload (all feeds) seen on the subscription, if any. */
@@ -83,17 +84,21 @@ export class PythSymbolMonitor {
   private validSymbols?: Set<string>;
   /** Periodic catalog-refresh timer. */
   private catalogTimer?: ReturnType<typeof setInterval>;
+  /** Pending debounced subscription refresh, if any. */
+  private refreshTimer?: ReturnType<typeof setTimeout>;
 
   constructor(opts: {
     channel: string;
     apiKey: string;
     numConnections: number;
     catalogRefreshMs: number;
+    refreshDebounceMs: number;
   }) {
     this.channel = parsePythLazerChannel(opts.channel);
     this.apiKey = opts.apiKey;
     this.numConnections = opts.numConnections;
     this.catalogRefreshMs = opts.catalogRefreshMs;
+    this.refreshDebounceMs = opts.refreshDebounceMs;
     this.symbolCache = new LRUCache<string, boolean>({
       max: MAX_PRICE_FEEDS,
       dispose: (_value, symbol) => {
@@ -152,7 +157,12 @@ export class PythSymbolMonitor {
     }, this.catalogRefreshMs);
     this.catalogTimer.unref?.(); // don't keep the process alive for the refresh
 
-    // Subscribe to every symbol queued before the client connected.
+    // Subscribe to every symbol queued before the client connected. A debounced
+    // refresh from seeding defaults (if any) is superseded by this direct call.
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
     this.refreshSubscription();
   }
 
@@ -188,6 +198,10 @@ export class PythSymbolMonitor {
       clearInterval(this.catalogTimer);
       this.catalogTimer = undefined;
     }
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
     if (!this.pythClient) return;
     try {
       this.pythClient.shutdown();
@@ -217,8 +231,22 @@ export class PythSymbolMonitor {
     }
     if (this.symbolCache.get(symbol)) return true; // already monitored; bumps recency
     this.symbolCache.set(symbol, true);
-    this.refreshSubscription();
+    this.scheduleRefresh();
     return true;
+  }
+
+  /**
+   * Debounces subscription refreshes: a burst of `requestPriceUpdate` calls results in a single
+   * refresh. Once a refresh is pending, later calls just mutate the cache — the pending refresh
+   * reads the final set when it fires.
+   */
+  private scheduleRefresh(): void {
+    if (this.refreshTimer) return; // a refresh is already queued; it will pick up this change
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      this.refreshSubscription();
+    }, this.refreshDebounceMs);
+    this.refreshTimer.unref?.();
   }
 
   /**

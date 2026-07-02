@@ -57,12 +57,15 @@ const { PythSymbolMonitor } = await import('../src/relayer/pyth-symbol-monitor.t
 
 const DEFAULT_SYMBOLS = ['Crypto.BTC/USD', 'Crypto.STX/USD', 'Crypto.USDC/USD'];
 const SUBSCRIPTION_ID = 1;
+/** Comfortably past the monitor's debounce window (250ms). */
+const PAST_DEBOUNCE_MS = 1_000;
 
 const OPTS = {
   channel: 'fixed_rate_200ms',
   apiKey: 'test-key',
   numConnections: 2,
   catalogRefreshMs: 3_600_000,
+  refreshDebounceMs: 250,
 };
 
 /** Build, start, and return a monitor along with its fake client + payload spy. */
@@ -94,6 +97,8 @@ describe('PythSymbolMonitor', () => {
       'Crypto.ETH/USD',
       ...Array.from({ length: 20 }, (_, i) => `Crypto.SYM${i}/USD`),
     ];
+    // Fake setTimeout so the debounced refresh can be driven deterministically.
+    mock.timers.enable({ apis: ['setTimeout'] });
   });
 
   afterEach(() => {
@@ -148,6 +153,9 @@ describe('PythSymbolMonitor', () => {
     const { monitor, client } = await startMonitor();
 
     assert.equal(monitor.requestPriceUpdate('Crypto.ETH/USD'), true);
+    // Refresh is debounced — nothing happens until the window elapses.
+    assert.equal(client.subscribe.mock.callCount(), 1);
+    mock.timers.tick(PAST_DEBOUNCE_MS);
 
     // Re-subscription tears down the old subscription first, then re-subscribes.
     assert.equal(client.unsubscribe.mock.callCount(), 1);
@@ -212,6 +220,7 @@ describe('PythSymbolMonitor', () => {
 
     // Trigger a re-subscribe and confirm the evicted symbol is gone from the set.
     monitor.requestPriceUpdate('Crypto.ETH/USD');
+    mock.timers.tick(PAST_DEBOUNCE_MS);
     assert.ok(!lastSubscribeArg(client).symbols.includes('Crypto.STX/USD'));
   });
 
@@ -220,6 +229,10 @@ describe('PythSymbolMonitor', () => {
 
     const added = Array.from({ length: 16 }, (_, i) => `Crypto.SYM${i}/USD`);
     for (const symbol of added) monitor.requestPriceUpdate(symbol);
+
+    // The whole burst debounces into a single refresh.
+    mock.timers.tick(PAST_DEBOUNCE_MS);
+    assert.equal(client.subscribe.mock.callCount(), 2, 'one refresh for the whole burst');
 
     const request = lastSubscribeArg(client);
     assert.equal(request.symbols.length, 16);

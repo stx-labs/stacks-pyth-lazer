@@ -76,6 +76,7 @@ async function initApp() {
     apiKey: ENV.PYTH_API_KEY,
     numConnections: ENV.PYTH_CLIENT_NUM_CONNECTIONS,
     catalogRefreshMs: ENV.PYTH_CATALOG_REFRESH_MS,
+    refreshDebounceMs: ENV.PYTH_REFRESH_DEBOUNCE_MS,
   });
   const config: ApiConfig = {
     pythSymbolMonitor: priceMonitor,

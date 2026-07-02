@@ -32,6 +32,8 @@ const schema = Type.Object({
   PYTH_CLIENT_NUM_CONNECTIONS: Type.Integer({ default: 4, minimum: 1 }),
   /** How often (ms) to refresh the Pyth symbol catalog used to validate pairs. Defaults to 6h. */
   PYTH_CATALOG_REFRESH_MS: Type.Integer({ default: 6 * 60 * 60 * 1000, minimum: 1000 }),
+  /** Debounce window (ms) for coalescing bursts of subscription changes. Defaults to 250. */
+  PYTH_REFRESH_DEBOUNCE_MS: Type.Integer({ default: 250, minimum: 0 }),
   /**
    * Principal that deployed the Pyth Lazer contracts. The oracle, decoder, storage, and governance
    * contract ids are derived from it (`<deployer>.pyth-lazer-oracle-v1`, etc.).
