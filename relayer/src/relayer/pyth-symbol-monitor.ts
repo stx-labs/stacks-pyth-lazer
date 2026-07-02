@@ -189,9 +189,15 @@ export class PythSymbolMonitor {
       this.catalogTimer = undefined;
     }
     if (!this.pythClient) return;
-    this.pythClient.shutdown();
-    this.pythClient = undefined;
-    this.subscribed = false;
+    try {
+      this.pythClient.shutdown();
+    } catch (error) {
+      logger.error(error, `${this.constructor.name} error shutting down Pyth client`);
+    } finally {
+      // Clear state regardless, so the monitor can be cleanly restarted.
+      this.pythClient = undefined;
+      this.subscribed = false;
+    }
     logger.info(`${this.constructor.name} stopped`);
   }
 
@@ -233,7 +239,12 @@ export class PythSymbolMonitor {
     if (!this.pythClient) return;
 
     if (this.subscribed) {
-      this.pythClient.unsubscribe(SUBSCRIPTION_ID);
+      try {
+        this.pythClient.unsubscribe(SUBSCRIPTION_ID);
+      } catch (error) {
+        // Best-effort teardown; proceed to resubscribe regardless.
+        logger.warn(error, `${this.constructor.name} failed to unsubscribe before refresh`);
+      }
       this.subscribed = false;
     }
 
@@ -242,34 +253,40 @@ export class PythSymbolMonitor {
       logger.info(`${this.constructor.name} no symbols to monitor; subscription cleared`);
       return;
     }
-    this.pythClient.subscribe({
-      type: 'subscribe',
-      subscriptionId: SUBSCRIPTION_ID,
-      symbols,
-      properties: [
-        'price',
-        'exponent',
-        'publisherCount',
-        'confidence',
-        'bestBidPrice',
-        'bestAskPrice',
-        'emaPrice',
-        'emaConfidence',
-      ],
-      formats: ['evm'],
-      deliveryFormat: 'binary',
-      parsed: true,
-      // Backstop: never let one bad symbol fail the whole subscription. Lazer subscribes to the
-      // valid feeds and reports the rest via `subscribedWithInvalidFeedIdsIgnored`, which we evict
-      // in `handleMessage`.
-      ignoreInvalidFeedIds: true,
-      channel: this.channel,
-    });
-    this.subscribed = true;
-    logger.info(
-      { subscriptionId: SUBSCRIPTION_ID, symbols },
-      `${this.constructor.name} subscribed to ${symbols.length} feed(s)`
-    );
+
+    try {
+      this.pythClient.subscribe({
+        type: 'subscribe',
+        subscriptionId: SUBSCRIPTION_ID,
+        symbols,
+        properties: [
+          'price',
+          'exponent',
+          'publisherCount',
+          'confidence',
+          'bestBidPrice',
+          'bestAskPrice',
+          'emaPrice',
+          'emaConfidence',
+        ],
+        formats: ['evm'],
+        deliveryFormat: 'binary',
+        parsed: true,
+        // Backstop: never let one bad symbol fail the whole subscription. Lazer subscribes to the
+        // valid feeds and reports the rest via `subscribedWithInvalidFeedIdsIgnored`, which we evict
+        // in `handleMessage`.
+        ignoreInvalidFeedIds: true,
+        channel: this.channel,
+      });
+      this.subscribed = true;
+      logger.info(
+        { subscriptionId: SUBSCRIPTION_ID, symbols },
+        `${this.constructor.name} subscribed to ${symbols.length} feed(s)`
+      );
+    } catch (error) {
+      // Leave `subscribed` false so a later refresh retries.
+      logger.error(error, `${this.constructor.name} failed to subscribe to price feeds`);
+    }
   }
 
   /**
