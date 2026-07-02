@@ -91,7 +91,7 @@ const big = (v: string | number | null | undefined) => (v === null || v === unde
 // ema-price/ema-confidence mirror the decoder's some-if-nonzero collapse (0 -> none). funding-*
 // and feed-update-timestamp are existence-flagged: the SDK omits them when absent (-> none) and
 // emits the value when present, which optInt/optUint(big(...)) maps straight through.
-const SESSION_TO_INT: Record<string, bigint> = { regular: 0n };
+const SESSION_TO_INT: Record<string, bigint> = { regular: 0n, closed: 4n };
 const sessionOpt = (v: string | number | null | undefined) => {
   if (v === null || v === undefined) return Cl.none();
   const n = typeof v === "number" ? BigInt(v) : SESSION_TO_INT[v];
