@@ -130,10 +130,14 @@ Notes:
 - The property list is **sequential TLV** — you must walk every property to find the next
   feed; you cannot index into it. Mirror `PythLazerLib`'s "always advance the cursor" rule.
 - A subscription chooses *which* properties are present, so the parser must be
-  property-driven (read type byte → read its fixed width), not fixed-layout.
+  property-driven (read type byte → read its value), not fixed-layout.
+- Types **6/7/8/12** are *existence-flagged*: on the wire each is a 1-byte flag, then the
+  8-byte value **only when the flag is nonzero** (a 0 flag = absent, occupying a single byte).
+  Distinct from the base props, where a value of 0 is itself the "missing" sentinel. The
+  decoder reads these via `read-opt-int64` / `read-opt-uint64`.
 - `price` is an `int64` mantissa; the real price is `price * 10^exponent` (exponent `int16`).
-- v1 persists a core subset (`price`, `exponent`, `confidence`, publish/feed timestamp); the
-  storage schema reserves the rest as optionals — see decision #4 / §6.4.
+- The v1 decoder parses the full property set (0-12); the storage schema reserved every field
+  as an optional up front, so this coverage lands without reshaping it — see decision #4 / §6.4.
 
 ### 3.5 Trusted signers
 
@@ -178,7 +182,7 @@ a separable pause key. This supersedes decision #1 below; see §6a.
 | Recover signer from sig | `secp256k1-recover?` (returns compressed key) | ✅ same pattern as `wormhole-core-v4` |
 | Compare recovered ↔ trusted key | buffer `is-eq` | ✅ trivial |
 | Byte parsing (uint8/16/32/64, int16/32/64, buff slices) | `slice?`, `buff-to-uint-be`, `buff-to-int-be`, `bit-shift-*` | ✅ port helpers from decoder/governance verbatim |
-| Staleness vs wall clock | `get-stacks-block-info? time` (seconds) | ✅ pattern from `pyth-storage-v4` (must convert µs→s) |
+| Staleness vs wall clock | `stacks-block-time` (current block, seconds) | ✅ pattern from `pyth-storage-v4` (must convert µs→s) |
 | ed25519 (Lazer `solana` fmt) | ❌ not in Clarity 5 (Clarity 6: `ed25519-verify`) | n/a — v1 uses the `evm`/secp256k1 format |
 
 **Conclusion: fully feasible with native Clarity 5, no new cryptography.** The hard part is
@@ -548,7 +552,7 @@ Each phase is independently reviewable/mergeable.
     `tests/pyth-lazer-golden-fixture.test.ts` decodes an upstream `PythLazer.t.sol` v0.1.1 vector
     end-to-end (envelope + secp256k1 recovery + big-endian payload) to Pyth's own asserted values.
   - ✅ **Storage schema finalized** (resolves the storage `DO NOT SHIP` FIXME). Live BTC/ETH/SOL
-    `evm` updates captured via `scripts/gen-lazer-fixture.mjs` + `pyth-lazer-protocol`'s
+    `evm` updates captured via `scripts/capture-base-properties.mjs` + `pyth-lazer-protocol`'s
     `AggregatedPriceFeedData` set the optional/required split: REQUIRED `price` (oracle SKIPS a
     price-less feed -- partial success -- rather than rejecting), `exponent`, `publisher-count`
     (the two protocol non-`Option` fields); OPTIONAL `confidence`, `best-bid`, `best-ask`, `ema-*`,

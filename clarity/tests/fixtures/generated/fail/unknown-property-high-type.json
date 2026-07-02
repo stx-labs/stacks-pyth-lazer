@@ -1,5 +1,5 @@
 {
-  "description": "a valid price followed by property type 200 (well above MAX_PROPERTY_TYPE 12); the parser rejects the unknown type even after a good property",
+  "description": "a valid price followed by property type 200 (far outside the v1 subscription); the parser rejects the unknown type even after a good property",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [

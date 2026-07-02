@@ -1,27 +1,20 @@
 // Screen the live Lazer catalog for STRUCTURALLY DIVERSE evm updates and save only
-// the novel ones as fixtures. Where gen-lazer-fixture.mjs saves consecutive updates
+// the novel ones as fixtures. Where capture-base-properties.mjs saves consecutive updates
 // of one fixed feed set, this explores many feeds across asset types and keeps an
 // update only when it differs from what tests/fixtures/captured already holds:
 //   new asset class, a missing optional field, a negative/zero price, a new channel,
 //   or a different signer.
 //
-//   LAZER_SCREEN_TARGET=10 node --env-file=.env scripts/screen-lazer-fixtures.mjs
+//   LAZER_SCREEN_TARGET=10 node --env-file=.env scripts/screen-asset-types.mjs
 //
 // Subscribes on fixed_rate@200ms -- the common channel across asset types (most
 // non-crypto feeds don't offer real_time) and itself a novelty vs the real_time
 // corpus. Saves <=16-feed updates (our decoder's MAX_FEEDS) into
 // tests/fixtures/captured/<timestampUs>.json, identical in shape to the API capture.
 import { writeFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from "node:fs";
-import { PythLazerClient } from "@pythnetwork/pyth-lazer-sdk";
-import { secp256k1 } from "@noble/curves/secp256k1";
-import { keccak_256 } from "@noble/hashes/sha3";
-import { hexToBytes, bytesToHex } from "@noble/hashes/utils";
+import { requireToken, createLazerClient, recoverSigner, channelByte, PROD_SIGNER, hexToBytes } from "./lib/lazer.mjs";
 
-const TOKEN = process.env.PYTH_API_KEY;
-if (!TOKEN) {
-  console.error("PYTH_API_KEY not set. Run: node --env-file=.env scripts/screen-lazer-fixtures.mjs");
-  process.exit(1);
-}
+const TOKEN = requireToken();
 
 const TARGET = Number(process.env.LAZER_SCREEN_TARGET ?? 10);
 const WINDOW = 16; // our decoder's MAX_FEEDS -- a saved update must not exceed this
@@ -30,7 +23,6 @@ const PER_WINDOW_MS = Number(process.env.LAZER_SCREEN_WINDOW_MS ?? 12000);
 const MAX_WINDOWS = Number(process.env.LAZER_SCREEN_MAX_WINDOWS ?? 40);
 const PROPERTIES = ["price", "exponent", "confidence", "bestBidPrice", "bestAskPrice", "publisherCount"];
 const OUT_DIR = "tests/fixtures/captured";
-const KNOWN_PROD_SIGNER = "03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b";
 
 const present = (v) => v !== undefined && v !== null;
 // Field-presence fingerprint, in [price,exponent,confidence,bestBid,bestAsk,publisherCount] order.
@@ -39,24 +31,7 @@ const bitmask = (f) =>
     .map((v) => (present(v) ? "1" : "0"))
     .join("");
 
-function recoverSigner(evm) {
-  const r = evm.slice(4, 36), s = evm.slice(36, 68), recid = evm[68];
-  const len = (evm[69] << 8) | evm[70];
-  const payload = evm.slice(71, 71 + len);
-  const sig = secp256k1.Signature.fromCompact(bytesToHex(r) + bytesToHex(s)).addRecoveryBit(recid);
-  return bytesToHex(sig.recoverPublicKey(keccak_256(payload)).toRawBytes(true));
-}
-
-const client = await PythLazerClient.create({
-  token: TOKEN,
-  webSocketPoolConfig: {
-    urls: [
-      "wss://pyth-lazer-0.dourolabs.app/v1/stream",
-      "wss://pyth-lazer-1.dourolabs.app/v1/stream",
-      "wss://pyth-lazer-2.dourolabs.app/v1/stream",
-    ],
-  },
-});
+const client = await createLazerClient(TOKEN);
 
 const symbols = await client.getSymbols();
 const idType = new Map(symbols.map((s) => [s.pyth_lazer_id, s.asset_type]));
@@ -91,7 +66,7 @@ if (existsSync(OUT_DIR)) {
     if (!name.endsWith(".json")) continue;
     const c = JSON.parse(readFileSync(`${OUT_DIR}/${name}`, "utf8"));
     let signer = "?";
-    try { signer = recoverSigner(hexToBytes(c.evmHex)); } catch { /* leave as ? */ }
+    try { signer = recoverSigner(hexToBytes(c.evmHex)).compressed; } catch { /* leave as ? */ }
     for (const x of msgTokens(c.parsed, c.channel, signer)) seen.add(x);
   }
 }
@@ -163,9 +138,9 @@ for (const win of windows) {
   if (upd.parsed.priceFeeds.length > WINDOW) { console.log(`[${win.type}] >${WINDOW} feeds, skip`); continue; }
 
   const evm = hexToBytes(upd.evmHex);
-  const channelByte = evm[83]; // payload offset 12 = magic(4)+timestamp(8); update offset 71+12
-  const signer = recoverSigner(evm);
-  const toks = msgTokens(upd.parsed, channelByte, signer);
+  const chByte = channelByte(evm);
+  const signer = recoverSigner(evm).compressed;
+  const toks = msgTokens(upd.parsed, chByte, signer);
   const novel = [...toks].filter((t) => !seen.has(t));
   if (novel.length === 0) { console.log(`[${win.type}] nothing new vs corpus, skip`); continue; }
   for (const t of toks) seen.add(t);
@@ -173,7 +148,7 @@ for (const win of windows) {
   const ts = upd.parsed.timestampUs;
   writeFileSync(
     `${OUT_DIR}/${ts}.json`,
-    JSON.stringify({ channel: channelByte, timestampUs: ts, parsed: upd.parsed, evmHex: upd.evmHex }, null, 2) + "\n",
+    JSON.stringify({ channel: chByte, timestampUs: ts, parsed: upd.parsed, evmHex: upd.evmHex }, null, 2) + "\n",
   );
   saved++;
 
@@ -183,7 +158,7 @@ for (const win of windows) {
   console.log(`   new tokens: ${novel.slice(0, 8).join(", ")}${novel.length > 8 ? ` (+${novel.length - 8} more)` : ""}`);
   if (negs.length) console.log(`   NEGATIVE price: ${negs.join(", ")}`);
   if (missing.length) console.log(`   missing fields [px,exp,conf,bid,ask,pub]: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? " ..." : ""}`);
-  if (signer !== KNOWN_PROD_SIGNER) console.log(`   !! DIFFERENT SIGNER: 0x${signer}`);
+  if (signer !== PROD_SIGNER) console.log(`   !! DIFFERENT SIGNER: 0x${signer}`);
 }
 
 console.log(`\nScreened ${tried} windows; saved ${saved} novel fixtures into ${OUT_DIR}/.`);

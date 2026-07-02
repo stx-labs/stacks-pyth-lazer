@@ -60,8 +60,9 @@ const getPrice = (feedId: number) =>
   simnet.callReadOnlyFn(STORAGE, "get-price", [Cl.uint(feedId)], deployer).result;
 
 // Expected stored record (finalized schema). The oracle requires
-// price/exponent/publisher-count and passes confidence through; best-bid/best-ask,
-// ema-*, and feed-update-timestamp are `none` for the updates these tests build.
+// price/exponent/publisher-count and passes confidence through; best-bid/best-ask and the
+// remaining optionals (funding-*, market-session, ema-*, feed-update-timestamp) are `none`
+// because the updates these tests build carry only the base properties.
 const storedRecord = (price: bigint, exponent: bigint, confidence: bigint, publisherCount: bigint) =>
   Cl.tuple({
     price: Cl.int(price),
@@ -70,6 +71,10 @@ const storedRecord = (price: bigint, exponent: bigint, confidence: bigint, publi
     confidence: Cl.some(Cl.uint(confidence)),
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),
@@ -130,6 +135,19 @@ describe("pyth-lazer-oracle-v1: verify-and-update-price-feeds", () => {
 
     simnet.callPublicFn(GOV, "unpause", [], deployer);
     expect(submit(makeUpdate([feed(1, 1n, 0n, 1n, 5n)])).result).toBeOk(Cl.uint(1));
+  });
+
+  it("treats a replayed update as an inert no-op (replay defense)", () => {
+    bootstrap();
+    // A captured, validly-signed update can be re-broadcast by anyone (the signature is
+    // still good). The per-feed monotonic guard is what neutralizes it: the replay carries
+    // the same publish-time, so it is not strictly newer than what it already wrote.
+    const update = makeUpdate([feed(1, 4_200_000_000n, -8n, 1_500_000n, 18n)]);
+    expect(submit(update).result).toBeOk(Cl.uint(1)); // first application writes
+    const replay = submit(update); // same bytes, re-submitted (even by a different relayer)
+    expect(replay.result).toBeOk(Cl.uint(0)); // nothing written
+    expect(replay.events.find((e) => e.event === "print_event")).toBeUndefined(); // no state change
+    expect(getPrice(1)).toBeOk(storedRecord(4_200_000_000n, -8n, 1_500_000n, 18n)); // unchanged
   });
 
   it("charges the per-update fee from the relayer to the fee recipient", () => {

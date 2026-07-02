@@ -1,5 +1,5 @@
 {
-  "description": "one update mixing feed shapes: a full feed, a price-only feed, an all-zero feed (only exponent survives), and a feed that LEADS with an unpersisted property (EmaPrice) before its persisted ones",
+  "description": "one update mixing feed shapes: a full feed (kept), a price-only feed (dropped: no exponent/publisher-count), an all-zero feed (dropped: price is the 0 sentinel), and a feed that LEADS with a non-price property (best-bid) before its required ones (kept). Exercises selective dropping alongside out-of-order property parsing",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [
@@ -18,7 +18,7 @@
     { "id": 52, "props": [["Price", "0"], ["Exponent", "0"], ["Confidence", "0"]] },
     {
       "id": 53,
-      "props": [["EmaPrice", "5"], ["Price", "7777"], ["Exponent", "-6"], ["MarketSession", "1"], ["PublisherCount", "2"]]
+      "props": [["BestBidPrice", "7000"], ["Price", "7777"], ["Exponent", "-6"], ["BestAskPrice", "8000"], ["PublisherCount", "2"]]
     }
   ]
 }

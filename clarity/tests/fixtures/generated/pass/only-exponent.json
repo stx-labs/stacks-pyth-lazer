@@ -1,8 +1,0 @@
-{
-  "description": "a feed whose sole property is exponent (no price); decodes with exponent set and every other field none -- a price-less feed is a valid DECODE (the oracle, not the decoder, is what skips it)",
-  "channel": 1,
-  "timestampUs": "1700000000000000",
-  "feeds": [
-    { "id": 61, "props": [["Exponent", "-8"]] }
-  ]
-}

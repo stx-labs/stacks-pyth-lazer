@@ -1,0 +1,27 @@
+{
+  "description": "two feeds with independent existence-flag states: feed 4 has funding-rate + feed-update-timestamp present, feed 5 has them absent (flag 0); presence is decoded per-feed",
+  "channel": 3,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    {
+      "id": 4,
+      "props": [
+        ["Price", "100"],
+        ["Exponent", "-2"],
+        ["PublisherCount", "5"],
+        ["FundingRate", "-999"],
+        ["FeedUpdateTimestamp", "1700000000333333"]
+      ]
+    },
+    {
+      "id": 5,
+      "props": [
+        ["Price", "200"],
+        ["Exponent", "-2"],
+        ["PublisherCount", "6"],
+        ["FundingRate", null],
+        ["FeedUpdateTimestamp", null]
+      ]
+    }
+  ]
+}

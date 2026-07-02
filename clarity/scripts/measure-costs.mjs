@@ -8,10 +8,9 @@
 // update. Two feed counts give a linear model (fixed overhead + per-feed cost).
 import { initSimnet } from "@stacks/clarinet-sdk";
 import { Cl } from "@stacks/transactions";
-import { hexToBytes } from "@noble/hashes/utils";
 import { readFileSync } from "node:fs";
+import { PROD_SIGNER, hexToBytes } from "./lib/lazer.mjs";
 
-const PROD_SIGNER = "03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b";
 const FAR_FUTURE = 100_000_000_000n;
 const DECODER = "pyth-lazer-decoder-v1";
 const ORACLE = "pyth-lazer-oracle-v1";
@@ -38,9 +37,9 @@ const nF3 = f3.parsed.priceFeeds.length;
 const nF16 = f16.parsed.priceFeeds.length;
 
 const updBuf = (f) => Cl.buffer(hexToBytes(f.evmHex));
-// NOTE: read-only calls (recover-signer / decode-payload) carry no cost report --
-// the SDK only meters transactions -- so we measure the two PUBLIC entry points. The
-// decode-and-verify linear model's fixed term captures the signature+header cost.
+// decode-and-verify-price-feeds is read-only (relayers reach it through the oracle),
+// but the SDK meters read-only calls too, so we measure it directly for the decode
+// linear model. verify-and-update-price-feeds is the public end-to-end relayer tx.
 
 const measurements = [];
 function measure(label, res) {
@@ -51,8 +50,8 @@ function measure(label, res) {
 }
 
 // full decode-and-verify (signature + trust + parse)
-measure(`decode-and-verify (${nF3} feeds)`, simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f3)], deployer));
-measure(`decode-and-verify (${nF16} feeds)`, simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f16)], deployer));
+measure(`decode-and-verify (${nF3} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f3)], deployer));
+measure(`decode-and-verify (${nF16} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f16)], deployer));
 // end-to-end oracle submit (verify + parse + storage write + fee path) -- the relayer's tx
 measure(`verify-and-update END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [updBuf(f3), decoderRef], relayer));
 measure(`verify-and-update END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [updBuf(f16), decoderRef], relayer));

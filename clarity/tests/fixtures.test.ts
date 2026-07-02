@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Cl } from "@stacks/transactions";
+import { Cl, type ClarityValue } from "@stacks/transactions";
 import { hexToBytes } from "@noble/hashes/utils";
 import { readdirSync, readFileSync } from "node:fs";
 import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, type FeedSpec } from "./helpers";
@@ -18,7 +18,8 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 //       { description, channel, timestampUs, feeds: [{ id, props: [[type, dec-str]] }],
 //         corrupt?, expectErr? } -- the runner encodes the payload, signs it with the
 //       TEST key, and decodes on-chain. `props` type is a PROP name or a raw number
-//       (for unknown-type cases); values are decimal strings (big ints / negatives).
+//       (for unknown-type cases); values are decimal strings (big ints / negatives), or
+//       null to encode an existence-flagged property (6/7/8/12) as absent (flag 0).
 //       pass: the decode must equal the spec. fail: it must error with `expectErr`.
 //
 // captured fixtures are signed by Pyth's PRODUCTION key; generated ones by the
@@ -75,7 +76,7 @@ function trustAll() {
 }
 
 const decode = (update: Uint8Array) =>
-  simnet.callPublicFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer).result;
+  simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer).result;
 const submit = (update: Uint8Array) =>
   simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [Cl.buffer(update), decoderRef], relayer).result;
 const getPrice = (feedId: number) =>
@@ -85,27 +86,51 @@ const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 const big = (v: string | number | null | undefined) => (v === null || v === undefined ? null : BigInt(v));
 
+// Extended props the decoder parses. Pyth serializes market-session as a label; the decoder
+// stores the numeric enum and always keeps it (0 = regular is a real value, not a sentinel).
+// ema-price/ema-confidence mirror the decoder's some-if-nonzero collapse (0 -> none). funding-*
+// and feed-update-timestamp are existence-flagged: the SDK omits them when absent (-> none) and
+// emits the value when present, which optInt/optUint(big(...)) maps straight through.
+const SESSION_TO_INT: Record<string, bigint> = { regular: 0n, closed: 4n };
+const sessionOpt = (v: string | number | null | undefined) => {
+  if (v === null || v === undefined) return Cl.none();
+  const n = typeof v === "number" ? BigInt(v) : SESSION_TO_INT[v];
+  if (n === undefined) throw new Error(`unmapped market-session label: ${v}`);
+  return Cl.some(Cl.uint(n));
+};
+const nonzeroIntOpt = (v: string | null | undefined) =>
+  v == null || BigInt(v) === 0n ? Cl.none() : Cl.some(Cl.int(BigInt(v)));
+const nonzeroUintOpt = (v: string | null | undefined) =>
+  v == null || BigInt(v) === 0n ? Cl.none() : Cl.some(Cl.uint(BigInt(v)));
+
 // === captured: real evm bytes must decode to Pyth's own parsed values ===
+
+// The decoder only emits feeds carrying all required fields; feeds missing one are dropped.
+const hasRequired = (f: any) => f.price != null && f.exponent != null && f.publisherCount != null;
 
 const capturedFeed = (f: any) =>
   Cl.tuple({
     "feed-id": Cl.uint(f.priceFeedId),
-    price: optInt(big(f.price)),
-    exponent: optInt(big(f.exponent)),
+    price: Cl.int(BigInt(f.price)),
+    exponent: Cl.int(BigInt(f.exponent)),
     confidence: optUint(big(f.confidence)),
-    "publisher-count": optUint(big(f.publisherCount)),
+    "publisher-count": Cl.uint(BigInt(f.publisherCount)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
-    "feed-update-timestamp": Cl.none(),
+    "funding-rate": optInt(big(f.fundingRate)),
+    "funding-timestamp": optUint(big(f.fundingTimestamp)),
+    "funding-rate-interval": optUint(big(f.fundingRateInterval)),
+    "market-session": sessionOpt(f.marketSession),
+    "ema-price": nonzeroIntOpt(f.emaPrice),
+    "ema-confidence": nonzeroUintOpt(f.emaConfidence),
+    "feed-update-timestamp": optUint(big(f.feedUpdateTimestamp)),
   });
 
 const capturedDecode = (c: any) =>
   Cl.tuple({
     timestamp: Cl.uint(BigInt(c.parsed.timestampUs)),
     channel: Cl.uint(c.channel),
-    "price-feeds": Cl.list(c.parsed.priceFeeds.map(capturedFeed)),
+    "price-feeds": Cl.list(c.parsed.priceFeeds.filter(hasRequired).map(capturedFeed)),
   });
 
 // The stored record = decoder output + oracle-supplied publish-time/channel.
@@ -117,9 +142,13 @@ const capturedStored = (f: any, c: any) =>
     confidence: optUint(big(f.confidence)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
-    "feed-update-timestamp": Cl.none(),
+    "funding-rate": optInt(big(f.fundingRate)),
+    "funding-timestamp": optUint(big(f.fundingTimestamp)),
+    "funding-rate-interval": optUint(big(f.fundingRateInterval)),
+    "market-session": sessionOpt(f.marketSession),
+    "ema-price": nonzeroIntOpt(f.emaPrice),
+    "ema-confidence": nonzeroUintOpt(f.emaConfidence),
+    "feed-update-timestamp": optUint(big(f.feedUpdateTimestamp)),
     "publish-time": Cl.uint(BigInt(c.timestampUs)),
     channel: Cl.uint(c.channel),
   });
@@ -129,7 +158,8 @@ const capturedStored = (f: any, c: any) =>
 const propType = (t: number | string) => (typeof t === "number" ? t : (PROP as Record<string, number>)[t]);
 const toFeedSpec = (f: any): FeedSpec => ({
   id: f.id,
-  props: f.props.map(([t, v]: [number | string, string]) => [propType(t), BigInt(v)]),
+  // a null prop value encodes an existence-flagged property (6/7/8/12) as absent (flag 0)
+  props: f.props.map(([t, v]: [number | string, string | null]) => [propType(t), v === null ? null : BigInt(v)]),
 });
 
 // Build the signed update for a spec, optionally applying a `corrupt` directive to
@@ -181,46 +211,73 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
   return update;
 }
 
-// PROP name -> decoder output field + signedness. Props not listed here (e.g.
-// EmaPrice) are advanced-over by the parser and never appear in the output.
-const PROP_OUT: Record<string, { field: string; kind: "int" | "uint" }> = {
-  Price: { field: "price", kind: "int" },
-  Exponent: { field: "exponent", kind: "int" },
-  Confidence: { field: "confidence", kind: "uint" },
-  PublisherCount: { field: "publisher-count", kind: "uint" },
-  BestBidPrice: { field: "best-bid", kind: "int" },
-  BestAskPrice: { field: "best-ask", kind: "int" },
+// PROP name -> decoder output field, kind, and how a spec value maps to the stored option:
+//   sentinel  -- a 0 value decodes to none (protocol "missing" marker; applies to price, publisher-count, confidence, best-bid/ask, ema-*)
+//   literal   -- kept as-is, 0 included (exponent, market-session)
+//   existence -- existence-flagged (6/7/8/12): `null` -> none, any bigint -> some (present 0 kept)
+type OutRule = "sentinel" | "literal" | "existence";
+const PROP_OUT: Record<string, { field: string; kind: "int" | "uint"; rule: OutRule }> = {
+  Price: { field: "price", kind: "int", rule: "sentinel" },
+  Exponent: { field: "exponent", kind: "int", rule: "literal" },
+  Confidence: { field: "confidence", kind: "uint", rule: "sentinel" },
+  PublisherCount: { field: "publisher-count", kind: "uint", rule: "sentinel" },
+  BestBidPrice: { field: "best-bid", kind: "int", rule: "sentinel" },
+  BestAskPrice: { field: "best-ask", kind: "int", rule: "sentinel" },
+  FundingRate: { field: "funding-rate", kind: "int", rule: "existence" },
+  FundingTimestamp: { field: "funding-timestamp", kind: "uint", rule: "existence" },
+  FundingRateInterval: { field: "funding-rate-interval", kind: "uint", rule: "existence" },
+  MarketSession: { field: "market-session", kind: "uint", rule: "literal" },
+  EmaPrice: { field: "ema-price", kind: "int", rule: "sentinel" },
+  EmaConfidence: { field: "ema-confidence", kind: "uint", rule: "sentinel" },
+  FeedUpdateTimestamp: { field: "feed-update-timestamp", kind: "uint", rule: "existence" },
 };
 
+// The optional tail (every field but feed-id + the 3 required), so the expected tuple is
+// built the same regardless of which props a spec carries.
+const OPTIONAL_OUT: Array<{ field: string; kind: "int" | "uint" }> = [
+  { field: "confidence", kind: "uint" },
+  { field: "best-bid", kind: "int" },
+  { field: "best-ask", kind: "int" },
+  { field: "funding-rate", kind: "int" },
+  { field: "funding-timestamp", kind: "uint" },
+  { field: "funding-rate-interval", kind: "uint" },
+  { field: "market-session", kind: "uint" },
+  { field: "ema-price", kind: "int" },
+  { field: "ema-confidence", kind: "uint" },
+  { field: "feed-update-timestamp", kind: "uint" },
+];
+
+// Build the expected decoded feed, or null if the decoder drops it (a required field --
+// price/exponent/publisher-count -- resolves to none). Each prop resolves per its rule above.
 function expectedFeedFromSpec(f: any) {
-  const t: Record<string, any> = {
-    "feed-id": Cl.uint(f.id),
-    price: Cl.none(),
-    exponent: Cl.none(),
-    confidence: Cl.none(),
-    "publisher-count": Cl.none(),
-    "best-bid": Cl.none(),
-    "best-ask": Cl.none(),
-    "ema-price": Cl.none(),
-    "ema-confidence": Cl.none(),
-    "feed-update-timestamp": Cl.none(),
-  };
+  const resolved = new Map<string, bigint | null>();
   for (const [name, v] of f.props) {
     const o = PROP_OUT[name as string];
     if (!o) continue;
-    // Mirror the decoder: a 0 in an optional field is Lazer's "missing" sentinel and
-    // decodes to none; exponent is always literal (a 0 exponent is a real value).
-    if (name !== "Exponent" && BigInt(v) === 0n) continue;
-    t[o.field] = o.kind === "int" ? Cl.some(Cl.int(BigInt(v))) : Cl.some(Cl.uint(BigInt(v)));
+    const val: bigint | null = v === null ? null : BigInt(v);
+    resolved.set(o.field, o.rule === "sentinel" && val === 0n ? null : val);
   }
-  return Cl.tuple(t);
+  const present = (field: string) => resolved.get(field) != null;
+  if (!present("price") || !present("exponent") || !present("publisher-count")) return null;
+  const opt = (field: string, kind: "int" | "uint") => {
+    const v = resolved.get(field);
+    return v == null ? Cl.none() : Cl.some(kind === "int" ? Cl.int(v) : Cl.uint(v));
+  };
+  const fields: Record<string, ClarityValue> = {
+    "feed-id": Cl.uint(f.id),
+    price: Cl.int(resolved.get("price")!),
+    exponent: Cl.int(resolved.get("exponent")!),
+    "publisher-count": Cl.uint(resolved.get("publisher-count")!),
+  };
+  for (const { field, kind } of OPTIONAL_OUT) fields[field] = opt(field, kind);
+  return Cl.tuple(fields);
 }
 
 const expectedDecodeFromSpec = (spec: any) =>
   Cl.tuple({
     timestamp: Cl.uint(BigInt(spec.timestampUs)),
     channel: Cl.uint(spec.channel),
-    "price-feeds": Cl.list(spec.feeds.map(expectedFeedFromSpec)),
+    "price-feeds": Cl.list(spec.feeds.map(expectedFeedFromSpec).filter((x: any) => x !== null)),
   });
 
 describe("fixtures: captured real Lazer updates", () => {
@@ -242,11 +299,10 @@ describe("fixtures: captured real Lazer updates", () => {
 
     // Model the per-feed monotonic guard to predict each submit's write count and
     // the final winner per feed -- works for any set (mixed feeds, gaps, dups).
-    // The oracle stores a feed only if it has all required fields (price, exponent,
-    // publisher-count); feeds missing one are skipped, so they neither count as a
-    // write nor land in storage. Mirror that here (the screened fixtures include
-    // feeds without confidence / best-bid / best-ask).
-    const hasRequired = (f: any) => f.price != null && f.exponent != null && f.publisherCount != null;
+    // The decoder drops a feed missing any required field (price, exponent,
+    // publisher-count), so it never reaches storage -- it neither counts as a write
+    // nor lands in storage. Mirror that here (the screened fixtures include feeds
+    // without confidence / best-bid / best-ask).
     const winner = new Map<number, { f: any; c: any }>();
     for (const c of seq) {
       let writes = 0;

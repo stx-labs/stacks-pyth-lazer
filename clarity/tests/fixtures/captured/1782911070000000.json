@@ -1,0 +1,31 @@
+{
+  "channel": 4,
+  "timestampUs": "1782911070000000",
+  "parsed": {
+    "timestampUs": "1782911070000000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 1,
+        "price": "5859513077836",
+        "publisherCount": 19,
+        "exponent": -8,
+        "feedUpdateTimestamp": 1782911070000000
+      },
+      {
+        "priceFeedId": 2,
+        "price": "157138366381",
+        "publisherCount": 20,
+        "exponent": -8,
+        "feedUpdateTimestamp": 1782911070000000
+      },
+      {
+        "priceFeedId": 6,
+        "price": "7478802824",
+        "publisherCount": 17,
+        "exponent": -8,
+        "feedUpdateTimestamp": 1782911070000000
+      }
+    ]
+  },
+  "evmHex": "2a22999a0c8073590984d98d7618581d215f5aa1683213164b918de02df02b4e8233b0b7634c8ed616309309b7d7699298aa898793a0895c67d98f2a7663f72170ceca4000006893c7d3750006558c54fe53800403000000010400000005544632104c04fff80300130c010006558c54fe538000000002040000000024962d2fad04fff80300140c010006558c54fe538000000006040000000001bdc5798804fff80300110c010006558c54fe5380"
+}

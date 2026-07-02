@@ -16,6 +16,9 @@ const ERR_STALE_PRICE = 3004;
 const ERR_NOT_GOVERNANCE = 4003;
 const ERR_PAUSED = 4004;
 
+// Role IDs (opaque 1-byte discriminators, mirroring the governance contract).
+const ROLE_PAUSE = Cl.buffer(Uint8Array.of(1));
+
 const REAL_TIME = 1; // Channel::RealTime
 const TS = 1_700_000_000_000_000n; // a plausible publish-time, microseconds
 
@@ -30,7 +33,8 @@ type EntryOpts = {
 };
 
 // The stored record (finalized schema): required price/exponent/publisher-count,
-// optional confidence + best-bid/ask + ema-* + feed-update-timestamp. Storage keeps
+// optional confidence + best-bid/ask + reserved tail (funding-*, market-session, ema-*,
+// feed-update-timestamp). Storage keeps
 // whatever the writer passes, so the same builder is used for the `write` input and
 // the `get-price` expectation. `confidence` defaults to `none` here (omitted) so the
 // guard tests that don't set it round-trip; tests that set it get `(some ...)`.
@@ -42,6 +46,10 @@ const stored = (o: EntryOpts) =>
     confidence: o.confidence === undefined ? Cl.none() : Cl.some(Cl.uint(o.confidence)),
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
+    "funding-rate": Cl.none(),
+    "funding-timestamp": Cl.none(),
+    "funding-rate-interval": Cl.none(),
+    "market-session": Cl.none(),
     "ema-price": Cl.none(),
     "ema-confidence": Cl.none(),
     "feed-update-timestamp": Cl.none(),
@@ -95,6 +103,25 @@ describe("pyth-lazer-storage: authorized-writer", () => {
     authorize(deployer);
     const { result } = write([entry({ feedId: 1, publishTime: TS })], wallet1);
     expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+
+  it("rejects a direct write from the governance/deployer principal (writer defaults to the oracle)", () => {
+    // No authorize() here: the writer is still its default, the v1 oracle. The deployer
+    // holds the governance role but is NOT the authorized writer, so writing directly is
+    // rejected. This pins the invariant that the governance role grants no write power --
+    // the only path into the store is the blessed oracle, so updates can't be injected by
+    // a privileged-but-wrong caller, only relayed through verify-and-update-price-feeds.
+    const { result } = write([entry({ feedId: 1, publishTime: TS })], deployer);
+    expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
+  });
+
+  it("does not let a pause-only holder re-point the authorized writer", () => {
+    // Grant wallet1 the pause role only. With the protocol active, set-authorized-writer's
+    // assert-active passes and its assert-governance must still reject -- so a pauser cannot
+    // hijack the write pointer toward a malicious writer (separation: pause != governance).
+    simnet.callPublicFn(GOV, "set-role", [Cl.principal(wallet1), ROLE_PAUSE, Cl.bool(true)], deployer);
+    const { result } = simnet.callPublicFn(STORAGE, "set-authorized-writer", [Cl.principal(wallet1)], wallet1);
+    expect(result).toBeErr(Cl.uint(ERR_NOT_GOVERNANCE));
   });
 
   it("blocks re-pointing the authorized writer while the protocol is paused", () => {
