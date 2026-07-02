@@ -1,0 +1,9 @@
+{
+  "description": "feed carries market-session 5, one past the 0-4 enum the decoder accepts (real equity bytes top out at 4 = closed)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 1, "props": [["Price", "182000000000"], ["Exponent", "-8"], ["PublisherCount", "19"], ["MarketSession", "5"]] }
+  ],
+  "expectErr": 2207
+}

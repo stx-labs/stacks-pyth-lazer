@@ -1,0 +1,131 @@
+{
+  "channel": 4,
+  "timestampUs": "1783004326000000",
+  "parsed": {
+    "timestampUs": "1783004326000000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 112,
+        "price": "60126100000000000",
+        "publisherCount": 3,
+        "exponent": -12,
+        "fundingRate": 52380000,
+        "fundingTimestamp": 1783004325791391,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 113,
+        "price": "61869350000000000",
+        "publisherCount": 3,
+        "exponent": -12,
+        "fundingRate": 30545926,
+        "fundingTimestamp": 1783000800000000,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 207,
+        "price": "1615580000000000",
+        "publisherCount": 3,
+        "exponent": -12,
+        "fundingRate": 50200000,
+        "fundingTimestamp": 1783004325791391,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 208,
+        "price": "77950000000000",
+        "publisherCount": 4,
+        "exponent": -12,
+        "fundingRate": -24410000,
+        "fundingTimestamp": 1782979200000000,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 209,
+        "price": "61869350000000000",
+        "publisherCount": 3,
+        "exponent": -12,
+        "fundingRate": 30545926,
+        "fundingTimestamp": 1783004325791391,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 210,
+        "price": "1708870000000000",
+        "publisherCount": 3,
+        "exponent": -12,
+        "fundingRate": 16717972,
+        "fundingTimestamp": 1783004325791391,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 211,
+        "price": "1708870000000000",
+        "publisherCount": 3,
+        "exponent": -12,
+        "fundingRate": 16717972,
+        "fundingTimestamp": 1783004325791391,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 212,
+        "price": "81440200000000",
+        "publisherCount": 3,
+        "exponent": -12,
+        "fundingRate": 6156722,
+        "fundingTimestamp": 1783000800000000,
+        "fundingRateInterval": 28800000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 213,
+        "price": "81440200000000",
+        "publisherCount": 4,
+        "exponent": -12,
+        "fundingRate": 338650,
+        "fundingTimestamp": 1783000800000000,
+        "fundingRateInterval": 3600000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 1554,
+        "price": "61718000000000000",
+        "publisherCount": 1,
+        "exponent": -12,
+        "fundingRate": 12500000,
+        "fundingTimestamp": 1783003917307143,
+        "fundingRateInterval": 3600000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      },
+      {
+        "priceFeedId": 1555,
+        "price": "1701200000000000",
+        "publisherCount": 1,
+        "exponent": -12,
+        "fundingRate": 12500000,
+        "fundingTimestamp": 1783003917378393,
+        "fundingRateInterval": 3600000000,
+        "marketSession": "regular",
+        "feedUpdateTimestamp": 1783004326000000
+      }
+    ]
+  },
+  "evmHex": "2a22999ade34060e5b3477537e60e6c831edee62b72be6cde192a318c17e1e90380f780d56ce975912665d181ee1c0e8ffee558ce4c9149da4f1e81d5c4ffd8d1188d26b0002c393c7d375000655a20b7bf580040b00000070080000d59c5e903ac80004fff4030003060100000000031f41600701000655a20b78c69f080100000006b49d20000900000c01000655a20b7bf58000000071080000dbcdd8953bfc0004fff403000306010000000001d218060701000655a139517800080100000006b49d20000900000c01000655a20b7bf580000000cf08000005bd5c8801980004fff403000306010000000002fdfdc00701000655a20b78c69f080100000006b49d20000900000c01000655a20b7bf580000000d00800000046e5260f6c0004fff40300040601fffffffffe8b887007010006559c31dba000080100000006b49d20000900000c01000655a20b7bf580000000d1080000dbcdd8953bfc0004fff403000306010000000001d218060701000655a20b78c69f080100000006b49d20000900000c01000655a20b7bf580000000d20800000612354d513c0004fff403000306010000000000ff18940701000655a20b78c69f080100000006b49d20000900000c01000655a20b7bf580000000d30800000612354d513c0004fff403000306010000000000ff18940701000655a20b78c69f080100000006b49d20000900000c01000655a20b7bf580000000d4080000004a11c631020004fff4030003060100000000005df1b20701000655a139517800080100000006b49d20000900000c01000655a20b7bf580000000d5080000004a11c631020004fff403000406010000000000052ada0701000655a139517800080100000000d693a4000900000c01000655a20b7bf58000000612080000db4431aa3f600004fff403000106010000000000bebc200701000655a1f31fcd07080100000000d693a4000900000c01000655a20b7bf58000000613080000060b3b7db1200004fff403000106010000000000bebc200701000655a1f320e359080100000000d693a4000900000c01000655a20b7bf580"
+}
