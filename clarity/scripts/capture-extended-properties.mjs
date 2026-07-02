@@ -16,6 +16,7 @@ import { requireToken, createLazerClient, recoverSigner, channelByte, PROD_SIGNE
 const TOKEN = requireToken();
 const CHANNEL = "fixed_rate@1000ms";
 const OUT_DIR = process.env.CAPTURE_OUT_DIR ?? "tests/fixtures/captured";
+const MAX_FEEDS = 16; // the decoder's price-feed list cap; a captured update can't exceed it
 const PROPS = ["price", "bestBidPrice", "bestAskPrice", "publisherCount", "exponent", "confidence",
   "fundingRate", "fundingTimestamp", "fundingRateInterval", "marketSession", "emaPrice", "emaConfidence", "feedUpdateTimestamp"];
 
@@ -56,7 +57,6 @@ const sessionOk = (w) => w.feeds.every((f) => f.vals[9] === undefined || f.vals[
 
 const client = await createLazerClient(TOKEN);
 const symbols = await client.getSymbols();
-const idSym = new Map(symbols.map((s) => [s.pyth_lazer_id, s.symbol]));
 const stable = (type) => symbols.filter((s) => s.asset_type === type && s.state === "stable").map((s) => s.pyth_lazer_id);
 
 let subId = 1;
@@ -82,7 +82,7 @@ function collect({ feeds, count, staggerMs, label }) {
     const finish = () => { try { client.unsubscribe(id); } catch {} clearTimeout(timer); resolve({ out, subErr }); };
     const timer = setTimeout(finish, staggerMs * count + 30000);
     client.addMessageListener(listener);
-    client.subscribe({ type: "subscribe", subscriptionId: id, priceFeedIds: feeds.slice(0, 16),
+    client.subscribe({ type: "subscribe", subscriptionId: id, priceFeedIds: feeds,
       properties: PROPS, formats: ["evm"], jsonBinaryEncoding: "hex", parsed: true, channel: CHANNEL, ignoreInvalidFeedIds: true });
   });
 }
@@ -93,8 +93,9 @@ let signerWarn = false;
 // Save updates from one group; `carries` (optional) requires a target property to be present
 // (e.g. a funding value) so the fixture actually adds the coverage the group is meant to.
 async function capture({ type, feeds, count, staggerMs, carries }) {
-  console.log(`Group ${type}: ${feeds.length} stable feeds`);
-  const r = await collect({ feeds, count, staggerMs, label: type });
+  const ids = feeds.slice(0, MAX_FEEDS); // cap here so behavior and the logged count stay aligned
+  console.log(`Group ${type}: subscribing to ${ids.length} of ${feeds.length} stable feeds`);
+  const r = await collect({ feeds: ids, count, staggerMs, label: type });
   if (r.subErr) console.log(`  subscriptionError: ${JSON.stringify(r.subErr)}`);
   let saved = 0;
   for (const u of r.out) {
