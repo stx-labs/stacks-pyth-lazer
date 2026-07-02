@@ -1,6 +1,6 @@
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
-import { Server } from 'http';
+import type { Server } from 'http';
 import type { FastifyPluginCallback } from 'fastify';
 import type { ApiConfig } from '../init.js';
 

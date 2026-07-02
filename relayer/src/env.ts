@@ -6,7 +6,7 @@ const schema = Type.Object({
   /** Specifies which Stacks network this API is indexing */
   NETWORK: Type.Enum({ mainnet: 'mainnet', testnet: 'testnet' }, { default: 'mainnet' }),
 
-  /** Hosname of the Token Metadata API server */
+  /** Hostname of the relayer API server */
   API_HOST: Type.String({ default: '0.0.0.0' }),
   /** Port in which to serve the API */
   API_PORT: Type.Number({ default: 3000, minimum: 0, maximum: 65535 }),
