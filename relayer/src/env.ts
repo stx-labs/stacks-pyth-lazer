@@ -11,6 +11,8 @@ const schema = Type.Object({
   /** Port in which to serve the API */
   API_PORT: Type.Number({ default: 3000, minimum: 0, maximum: 65535 }),
 
+  /** Scheme for the Stacks node RPC endpoint. Use `https` for public/TLS nodes. */
+  STACKS_NODE_RPC_SCHEME: Type.Enum({ http: 'http', https: 'https' }, { default: 'http' }),
   /** Stacks node RPC host */
   STACKS_NODE_RPC_HOST: Type.String(),
   /** Stacks node RPC port */

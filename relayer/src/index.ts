@@ -14,7 +14,7 @@ import type { ApiConfig } from './api/init.js';
 async function initBackgroundServices(config: ApiConfig) {
   logger.info('Initializing background services...');
 
-  const nodeRpcBaseUrl = `http://${ENV.STACKS_NODE_RPC_HOST}:${ENV.STACKS_NODE_RPC_PORT}`;
+  const nodeRpcBaseUrl = `${ENV.STACKS_NODE_RPC_SCHEME}://${ENV.STACKS_NODE_RPC_HOST}:${ENV.STACKS_NODE_RPC_PORT}`;
 
   const reader = new ContractSymbolPriceReader({
     sender: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
