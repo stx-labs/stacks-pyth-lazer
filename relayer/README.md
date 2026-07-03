@@ -26,9 +26,9 @@ constructor injection (units read config from their options, not the environment
 | [`PriceUpdateTransactionSubmitter`](src/relayer/price-update-transaction-submitter.ts) | Builds, signs, and broadcasts the contract call. |
 | [`ContractSymbolPriceReader`](src/relayer/contract-symbol-price-reader.ts) | Read-only contract reads (on-chain price baselines, stale-price threshold). |
 
-A small [Fastify API](src/api) exposes `POST /price-update` (body `{ symbol }`,
-where `symbol` is a `Crypto.`-prefixed pair such as `Crypto.BTC/USD`) to add a
-pair to the monitored set and force an immediate on-demand push. Configuration is
+A small [Fastify API](src/api) exposes `POST /relayer/v1/price-update` (also available at
+`POST /relayer/price-update`) with body `{ symbol }`, where `symbol` is a `Crypto.`-prefixed
+pair such as `Crypto.BTC/USD`, to add a pair to the monitored set and force an immediate on-demand push. Configuration is
 centralized and validated in
 [`src/env.ts`](src/env.ts).
 
