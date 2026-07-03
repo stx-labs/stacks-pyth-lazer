@@ -6,18 +6,25 @@ import type { Server } from 'http';
 import { PINO_LOGGER_CONFIG } from '@stacks/api-toolkit';
 import { PairsRoutes } from './routes/pairs.js';
 import type { PythSymbolMonitor } from '../relayer/pyth-symbol-monitor.ts';
+import type { PriceUpdatePlanner } from '../relayer/price-update-planner.ts';
 import * as promClient from 'prom-client';
 
 /** Configuration for the API service. */
 export interface ApiConfig {
   pythSymbolMonitor: PythSymbolMonitor;
+  planner: PriceUpdatePlanner;
 }
 
 export const Api: FastifyPluginAsync<ApiConfig, Server, TypeBoxTypeProvider> = async (
   fastify,
   config
 ) => {
-  await fastify.register(PairsRoutes, config);
+  // Pass only app config down — `config` here also carries the register `prefix`,
+  // and forwarding it would double-prefix the routes (already applied to this context).
+  await fastify.register(PairsRoutes, {
+    pythSymbolMonitor: config.pythSymbolMonitor,
+    planner: config.planner,
+  });
 };
 
 export async function buildApiServer(config: ApiConfig) {

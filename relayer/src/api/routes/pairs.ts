@@ -1,34 +1,46 @@
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
-import { Type } from '@sinclair/typebox';
 import type { Server } from 'http';
 import type { FastifyPluginCallback } from 'fastify';
 import type { ApiConfig } from '../init.js';
+import {
+  PriceUpdateBodySchema,
+  PriceUpdateResponseSchema,
+  ErrorResponseSchema,
+} from '../schemas.js';
 
-export const PairsRoutes: FastifyPluginCallback<
-  ApiConfig,
-  Server,
-  TypeBoxTypeProvider
-> = (fastify, config, done) => {
+export const PairsRoutes: FastifyPluginCallback<ApiConfig, Server, TypeBoxTypeProvider> = (
+  fastify,
+  config,
+  done
+) => {
   fastify.post(
     '/price-update',
     {
       schema: {
-        body: Type.Object({
-          symbol: Type.String(),
-        }),
+        body: PriceUpdateBodySchema,
+        response: {
+          200: PriceUpdateResponseSchema,
+          400: ErrorResponseSchema,
+        },
       },
     },
     async (request, reply) => {
-      // TODO: Improve this endpoint depending on partner API design
-      const accepted = config.pythSymbolMonitor.requestPriceUpdate(request.body.symbol);
+      const { symbol } = request.body;
+
+      // Add to the monitored set (validated against the Lazer catalog).
+      const accepted = config.pythSymbolMonitor.requestPriceUpdate(symbol);
       if (!accepted) {
         return reply.status(400).send({
-          error: `Unknown or unsupported Pyth Lazer symbol: ${request.body.symbol}`,
+          error: 'unknown_symbol',
+          message: `Unknown or unsupported Pyth Lazer symbol: ${symbol}`,
         });
       }
-      return reply.status(200).send({
-        message: 'Price update requested',
-      });
+
+      // On-demand trigger: force the next eligible update to be relayed on-chain,
+      // regardless of the deviation threshold.
+      config.planner.requestImmediateUpdate();
+
+      return reply.status(200).send({ message: 'Price update requested', symbol });
     }
   );
   done();

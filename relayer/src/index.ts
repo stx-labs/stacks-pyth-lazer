@@ -16,31 +16,7 @@ import Fastify from 'fastify';
 async function initBackgroundServices(config: ApiConfig) {
   logger.info('Initializing background services...');
 
-  const nodeRpcBaseUrl = `${ENV.STACKS_NODE_RPC_SCHEME}://${ENV.STACKS_NODE_RPC_HOST}:${ENV.STACKS_NODE_RPC_PORT}`;
-
-  const reader = new ContractSymbolPriceReader({
-    sender: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
-    rpcBaseUrl: nodeRpcBaseUrl,
-  });
-
-  const submitter = new PriceUpdateTransactionSubmitter({
-    senderKey: ENV.TX_SUBMITTER_PRIVATE_KEY,
-    network: ENV.NETWORK,
-    deployer: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
-    txFeeMicroStx: ENV.TX_SUBMITTER_FEE_USTX,
-    feeBumpPercent: ENV.TX_SUBMITTER_FEE_BUMP_PERCENT,
-    maxFeeMicroStx: ENV.TX_SUBMITTER_MAX_FEE_USTX,
-    rpcBaseUrl: nodeRpcBaseUrl,
-  });
-
-  const planner = new PriceUpdatePlanner({
-    reader,
-    submitter,
-    heartbeatMs: ENV.PRICE_UPDATE_HEARTBEAT_MS,
-    minSubmitIntervalMs: ENV.PRICE_UPDATE_MIN_SUBMIT_INTERVAL_MS,
-    deviationBps: ENV.PRICE_UPDATE_DEVIATION_BPS,
-  });
-  await planner.validateHeartbeat();
+  await config.planner.validateHeartbeat();
 
   registerShutdownConfig({
     name: 'Pyth Price Monitor',
@@ -49,7 +25,9 @@ async function initBackgroundServices(config: ApiConfig) {
       await config.pythSymbolMonitor.stop();
     },
   });
-  await config.pythSymbolMonitor.start((evm, parsed) => planner.handlePriceMonitorPayload(evm, parsed));
+  await config.pythSymbolMonitor.start((evm, parsed) =>
+    config.planner.handlePriceMonitorPayload(evm, parsed)
+  );
 }
 
 /**
@@ -95,16 +73,40 @@ async function initApiService(config: ApiConfig) {
  * Initializes the application.
  */
 async function initApp() {
-  const priceMonitor = new PythSymbolMonitor({
+  const nodeRpcBaseUrl = `${ENV.STACKS_NODE_RPC_SCHEME}://${ENV.STACKS_NODE_RPC_HOST}:${ENV.STACKS_NODE_RPC_PORT}`;
+
+  const reader = new ContractSymbolPriceReader({
+    sender: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
+    rpcBaseUrl: nodeRpcBaseUrl,
+  });
+
+  const submitter = new PriceUpdateTransactionSubmitter({
+    senderKey: ENV.TX_SUBMITTER_PRIVATE_KEY,
+    network: ENV.NETWORK,
+    deployer: ENV.PYTH_DEPLOYER_STACKS_ADDRESS,
+    txFeeMicroStx: ENV.TX_SUBMITTER_FEE_USTX,
+    feeBumpPercent: ENV.TX_SUBMITTER_FEE_BUMP_PERCENT,
+    maxFeeMicroStx: ENV.TX_SUBMITTER_MAX_FEE_USTX,
+    rpcBaseUrl: nodeRpcBaseUrl,
+  });
+
+  const planner = new PriceUpdatePlanner({
+    reader,
+    submitter,
+    heartbeatMs: ENV.PRICE_UPDATE_HEARTBEAT_MS,
+    minSubmitIntervalMs: ENV.PRICE_UPDATE_MIN_SUBMIT_INTERVAL_MS,
+    deviationBps: ENV.PRICE_UPDATE_DEVIATION_BPS,
+  });
+
+  const pythSymbolMonitor = new PythSymbolMonitor({
     channel: ENV.PYTH_LAZER_CHANNEL,
     apiKey: ENV.PYTH_API_KEY,
     numConnections: ENV.PYTH_CLIENT_NUM_CONNECTIONS,
     catalogRefreshMs: ENV.PYTH_CATALOG_REFRESH_MS,
     refreshDebounceMs: ENV.PYTH_REFRESH_DEBOUNCE_MS,
   });
-  const config: ApiConfig = {
-    pythSymbolMonitor: priceMonitor,
-  };
+
+  const config: ApiConfig = { pythSymbolMonitor, planner };
   await initBackgroundServices(config);
   await initApiService(config);
 }
