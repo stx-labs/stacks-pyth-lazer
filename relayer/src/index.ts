@@ -78,7 +78,7 @@ async function initApiService(config: ApiConfig) {
     logLevel: 'info',
     handler: async (_, reply) => {
       const metrics: string = await promClient.register.metrics();
-      await reply.type('text/plain').send(metrics);
+      await reply.type(promClient.register.contentType).send(metrics);
     },
   });
   registerShutdownConfig({

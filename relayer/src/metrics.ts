@@ -2,8 +2,8 @@ import { Counter, Gauge, Histogram } from 'prom-client';
 
 /**
  * Prometheus metrics for the relayer. Each metric auto-registers with prom-client's
- * default registry, which `fastify-metrics` serves at `/metrics` (alongside default
- * process metrics and per-route HTTP metrics).
+ * default registry, which is exposed by the dedicated metrics server at `GET /metrics`
+ * (alongside default process metrics and per-route HTTP metrics collected by fastify-metrics).
  *
  * Cardinality is kept bounded: `symbol` is capped at 16 and `reason`/`method`/`result`
  * are fixed enums. High-cardinality detail (tx ids, raw errors) belongs in logs.
