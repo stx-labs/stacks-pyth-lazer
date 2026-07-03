@@ -7,6 +7,7 @@ import {
   makeContractCall,
   type TxBroadcastResult,
 } from '@stacks/transactions';
+import * as metrics from '../metrics.ts';
 
 /** Contracts (all under the same deployer) and the write entry point. */
 const ORACLE_CONTRACT_NAME = 'pyth-lazer-oracle-v1';
@@ -86,11 +87,15 @@ export class PriceUpdateTransactionSubmitter {
   }
 
   async submit(evm: Buffer): Promise<SubmitResult> {
+    let kind: 'fresh' | 'replace' = 'fresh';
+    const endTimer = metrics.txBuildDuration.startTimer();
     try {
       const target = await this.resolveTarget();
       if (!target) {
+        metrics.txFeeCeilingHits.inc();
         return { ok: false, error: 'fee ceiling reached; cannot replace pending tx' };
       }
+      kind = target.replacing ? 'replace' : 'fresh';
 
       const transaction = await makeContractCall({
         contractAddress: this.deployer,
@@ -121,9 +126,12 @@ export class PriceUpdateTransactionSubmitter {
     } catch (error) {
       // Build/network failure: drop pending so the next attempt re-reads the chain.
       this.pending = undefined;
+      metrics.txSubmissions.inc({ kind, result: 'error' });
       const message = error instanceof Error ? error.message : String(error);
       logger.error(error, `${this.constructor.name} failed to build/broadcast update: ${message}`);
       return { ok: false, error: message };
+    } finally {
+      endTimer();
     }
   }
 
@@ -134,9 +142,13 @@ export class PriceUpdateTransactionSubmitter {
     replacing: boolean
   ): SubmitResult {
     const txId = result.txid.startsWith('0x') ? result.txid : `0x${result.txid}`;
+    const kind = replacing ? 'replace' : 'fresh';
+    metrics.txFee.observe(Number(fee));
 
     if (!('error' in result)) {
       this.pending = { nonce, fee };
+      metrics.txSubmissions.inc({ kind, result: 'broadcast' });
+      if (replacing) metrics.txReplacements.inc();
       logger.info(
         { txId, nonce: Number(nonce), fee: Number(fee), replacing },
         replacing
@@ -151,6 +163,8 @@ export class PriceUpdateTransactionSubmitter {
     if (NONCE_REJECTION_REASONS.has(result.reason)) {
       this.pending = undefined;
     }
+    metrics.txSubmissions.inc({ kind, result: 'rejected' });
+    metrics.txRejections.inc({ reason: result.reason });
     logger.error(
       { reason: result.reason, error: result.error, txId },
       `${this.constructor.name} broadcast rejected: ${result.reason}`
@@ -192,10 +206,26 @@ export class PriceUpdateTransactionSubmitter {
    * that our own unmined tx is still pending and replace it.
    */
   private async fetchConfirmedNonce(): Promise<bigint> {
-    const account = await this.rpc.request('GET', '/v2/accounts/{principal}', {
-      params: { path: { principal: this.senderAddress }, query: { proof: 0 } },
-    });
-    return BigInt(account.nonce);
+    const endTimer = metrics.rpcRequestDuration.startTimer({ method: 'account' });
+    try {
+      const account = await this.rpc.request('GET', '/v2/accounts/{principal}', {
+        params: { path: { principal: this.senderAddress }, query: { proof: 0 } },
+      });
+      metrics.rpcRequests.inc({ method: 'account', result: 'success' });
+      // Balance rides along on the same response — track it to alert before the
+      // account can no longer pay fees. Isolated so a parse hiccup can't fail the read.
+      try {
+        if (account.balance) metrics.walletBalance.set(Number(BigInt(account.balance)));
+      } catch {
+        /* ignore balance parse errors */
+      }
+      return BigInt(account.nonce);
+    } catch (error) {
+      metrics.rpcRequests.inc({ method: 'account', result: 'error' });
+      throw error;
+    } finally {
+      endTimer();
+    }
   }
 
   /**

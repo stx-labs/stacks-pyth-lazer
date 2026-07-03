@@ -1,6 +1,7 @@
 import { createCoreRpcClient, type CoreRpcClient } from '@stacks/rpc-client';
 import { Cl, ClarityType, cvToHex, hexToCV } from '@stacks/transactions';
 import BigNumber from 'bignumber.js';
+import * as metrics from '../metrics.ts';
 
 /** A price record as stored on-chain in the `pyth-lazer-storage` contract. */
 export interface OnChainPrice {
@@ -68,26 +69,36 @@ export class ContractSymbolPriceReader {
     functionName: string,
     args: Parameters<typeof cvToHex>[0][]
   ) {
-    const res = (await this.client.request(
-      'POST',
-      '/v2/contracts/call-read/{deployer_address}/{contract_name}/{function_name}',
-      {
-        params: {
-          path: {
-            deployer_address: this.sender,
-            contract_name: contractName,
-            function_name: functionName,
+    const method = functionName.replace(/-/g, '_'); // bounded label: get_price | get_stale_price_threshold
+    const endTimer = metrics.rpcRequestDuration.startTimer({ method });
+    try {
+      const res = (await this.client.request(
+        'POST',
+        '/v2/contracts/call-read/{deployer_address}/{contract_name}/{function_name}',
+        {
+          params: {
+            path: {
+              deployer_address: this.sender,
+              contract_name: contractName,
+              function_name: functionName,
+            },
           },
-        },
-        body: { sender: this.sender, arguments: args.map(cvToHex) },
-      }
-    )) as ReadOnlyResult;
+          body: { sender: this.sender, arguments: args.map(cvToHex) },
+        }
+      )) as ReadOnlyResult;
 
-    if (!res.okay || !res.result) {
-      throw new Error(
-        `read-only call ${contractName}.${functionName} failed: ${res.cause ?? 'unknown'}`
-      );
+      if (!res.okay || !res.result) {
+        throw new Error(
+          `read-only call ${contractName}.${functionName} failed: ${res.cause ?? 'unknown'}`
+        );
+      }
+      metrics.rpcRequests.inc({ method, result: 'success' });
+      return hexToCV(res.result);
+    } catch (error) {
+      metrics.rpcRequests.inc({ method, result: 'error' });
+      throw error;
+    } finally {
+      endTimer();
     }
-    return hexToCV(res.result);
   }
 }
