@@ -17,6 +17,7 @@
     "test:pyth-symbol-monitor": "NODE_ENV=test node --import tsx --test --experimental-test-module-mocks --test-concurrency=1 ./tests/pyth-symbol-monitor.test.ts",
     "test:price-update-transaction-submitter": "NODE_ENV=test node --import tsx --test --experimental-test-module-mocks --test-concurrency=1 ./tests/price-update-transaction-submitter.test.ts",
     "test:contract-symbol-price-reader": "NODE_ENV=test node --import tsx --test --experimental-test-module-mocks --test-concurrency=1 ./tests/contract-symbol-price-reader.test.ts",
+    "test:price-update-route": "NODE_ENV=test node --import tsx --test --test-concurrency=1 ./tests/price-update-route.test.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

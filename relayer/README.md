@@ -26,8 +26,10 @@ constructor injection (units read config from their options, not the environment
 | [`PriceUpdateTransactionSubmitter`](src/relayer/price-update-transaction-submitter.ts) | Builds, signs, and broadcasts the contract call. |
 | [`ContractSymbolPriceReader`](src/relayer/contract-symbol-price-reader.ts) | Read-only contract reads (on-chain price baselines, stale-price threshold). |
 
-A small [Fastify API](src/api) exposes `POST /price-update` to add a pair to the
-monitored set on demand. Configuration is centralized and validated in
+A small [Fastify API](src/api) exposes `POST /price-update` (body `{ symbol }`,
+where `symbol` is a `Crypto.`-prefixed pair such as `Crypto.BTC/USD`) to add a
+pair to the monitored set and force an immediate on-demand push. Configuration is
+centralized and validated in
 [`src/env.ts`](src/env.ts).
 
 ```
@@ -141,8 +143,6 @@ npm run test:contract-symbol-price-reader
 - **Broadcast-ok ≠ mined.** Baselines advance on successful broadcast, not on
   confirmation — a mined-but-aborted tx (e.g. a monotonic-guard skip) can briefly
   drift the baseline until the next push corrects it. No confirmation tracking yet.
-- **`POST /price-update`** adds a symbol to the monitor but is not yet wired to
-  the planner's on-demand force trigger.
 - Single signing key from env; no key-management / secret-store integration.
 
 ## Open questions (gating a production build)
