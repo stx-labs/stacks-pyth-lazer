@@ -1,10 +1,12 @@
 import Fastify, { type FastifyPluginAsync } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import FastifyCors from '@fastify/cors';
+import fastifyMetrics from 'fastify-metrics';
 import type { Server } from 'http';
 import { PINO_LOGGER_CONFIG } from '@stacks/api-toolkit';
 import { PairsRoutes } from './routes/pairs.js';
 import type { PythSymbolMonitor } from '../relayer/pyth-symbol-monitor.ts';
+import * as promClient from 'prom-client';
 
 /** Configuration for the API service. */
 export interface ApiConfig {
@@ -25,6 +27,10 @@ export async function buildApiServer(config: ApiConfig) {
   }).withTypeProvider<TypeBoxTypeProvider>();
 
   await fastify.register(FastifyCors);
+  await fastify.register(fastifyMetrics.default, {
+    endpoint: null,
+    promClient: promClient,
+  });
   await fastify.register(Api, { ...config, prefix: '/relayer/v1' });
   await fastify.register(Api, { ...config, prefix: '/relayer' });
 

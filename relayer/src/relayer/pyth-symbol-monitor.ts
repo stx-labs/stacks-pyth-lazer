@@ -7,6 +7,7 @@ import {
   type Response as LazerControlMessage,
 } from '@pythnetwork/pyth-lazer-sdk';
 import { LRUCache } from 'lru-cache';
+import * as metrics from '../metrics.ts';
 
 /**
  * Maximum number of feeds we monitor at once. The on-chain
@@ -143,11 +144,14 @@ export class PythSymbolMonitor {
     });
     this.pythClient.addMessageListener(this.handleMessage);
     this.pythClient.addAllConnectionsDownListener(() => {
+      metrics.pythConnectionUp.set(0);
       logger.error(`${this.constructor.name} all Pyth Lazer connections are down`);
     });
     this.pythClient.addConnectionRestoredListener(() => {
+      metrics.pythConnectionUp.set(1);
       logger.info(`${this.constructor.name} Pyth Lazer connection restored`);
     });
+    metrics.pythConnectionUp.set(1);
 
     // Load the Pyth symbol catalog so `requestPriceUpdate` can validate new pairs, and keep it
     // fresh (feeds get added/removed over time).
@@ -176,11 +180,14 @@ export class PythSymbolMonitor {
       const catalog = await this.pythClient.getSymbols();
       // Accept either identifier form; we validate the literal string we subscribe with.
       this.validSymbols = new Set(catalog.flatMap(entry => [entry.name, entry.symbol]));
+      metrics.catalogLoads.inc({ result: 'success' });
+      metrics.catalogSymbols.set(this.validSymbols.size);
       logger.info(
         { count: this.validSymbols.size },
         `${this.constructor.name} loaded Pyth Lazer symbol catalog`
       );
     } catch (error) {
+      metrics.catalogLoads.inc({ result: 'error' });
       logger.error(error, `${this.constructor.name} failed to load symbol catalog`);
     }
   }
@@ -226,6 +233,7 @@ export class PythSymbolMonitor {
    */
   requestPriceUpdate(symbol: string): boolean {
     if (!this.isKnownSymbol(symbol)) {
+      metrics.symbolsRejected.inc({ reason: 'unknown_symbol' });
       logger.warn(`${this.constructor.name} rejecting unknown symbol ${symbol}`);
       return false;
     }
@@ -278,6 +286,7 @@ export class PythSymbolMonitor {
 
     const symbols = [...this.symbolCache.keys()];
     if (symbols.length === 0) {
+      metrics.symbolsSubscribed.set(0);
       logger.info(`${this.constructor.name} no symbols to monitor; subscription cleared`);
       return;
     }
@@ -307,6 +316,8 @@ export class PythSymbolMonitor {
         channel: this.channel,
       });
       this.subscribed = true;
+      metrics.subscriptionRefreshes.inc();
+      metrics.symbolsSubscribed.set(symbols.length);
       logger.info(
         { subscriptionId: SUBSCRIPTION_ID, symbols },
         `${this.constructor.name} subscribed to ${symbols.length} feed(s)`
@@ -331,7 +342,10 @@ export class PythSymbolMonitor {
           { subscriptionId: message.subscriptionId, unknownSymbols, unknownIds },
           `${this.constructor.name} Lazer ignored invalid feeds; evicting them`
         );
-        for (const symbol of unknownSymbols) this.symbolCache.delete(symbol);
+        for (const symbol of unknownSymbols) {
+          this.symbolCache.delete(symbol);
+          metrics.symbolsRejected.inc({ reason: 'lazer_ignored' });
+        }
         break;
       }
       case 'error':
@@ -357,6 +371,9 @@ export class PythSymbolMonitor {
   }
 
   private readonly handleMessage = (event: JsonOrBinaryResponse): void => {
+    metrics.pythMessagesReceived.inc({ type: event.type });
+    metrics.pythLastMessageTimestamp.set(Date.now() / 1000);
+
     if (event.type !== 'binary') {
       this.handleControlMessage(event.value);
       return;

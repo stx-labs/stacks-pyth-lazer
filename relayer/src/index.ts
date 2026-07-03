@@ -1,4 +1,4 @@
-import { logger, registerShutdownConfig } from '@stacks/api-toolkit';
+import { logger, PINO_LOGGER_CONFIG, registerShutdownConfig } from '@stacks/api-toolkit';
 import { buildApiServer } from './api/init.js';
 import { ENV } from './env.js';
 import { PythSymbolMonitor } from './relayer/pyth-symbol-monitor.ts';
@@ -6,6 +6,8 @@ import { PriceUpdatePlanner } from './relayer/price-update-planner.ts';
 import { PriceUpdateTransactionSubmitter } from './relayer/price-update-transaction-submitter.ts';
 import { ContractSymbolPriceReader } from './relayer/contract-symbol-price-reader.ts';
 import type { ApiConfig } from './api/init.js';
+import * as promClient from 'prom-client';
+import Fastify from 'fastify';
 
 /**
  * Initializes background services.
@@ -65,6 +67,28 @@ async function initApiService(config: ApiConfig) {
     },
   });
   await apiServer.listen({ host: ENV.API_HOST, port: ENV.API_PORT });
+
+  const promServer = Fastify({
+    trustProxy: true,
+    logger: PINO_LOGGER_CONFIG,
+  });
+  promServer.route({
+    url: '/metrics',
+    method: 'GET',
+    logLevel: 'info',
+    handler: async (_, reply) => {
+      const metrics: string = await promClient.register.metrics();
+      await reply.type('text/plain').send(metrics);
+    },
+  });
+  registerShutdownConfig({
+    name: 'Prometheus Server',
+    forceKillable: true,
+    handler: async () => {
+      await promServer.close();
+    },
+  });
+  await promServer.listen({ host: ENV.PROMETHEUS_HOST, port: ENV.PROMETHEUS_PORT });
 }
 
 /**

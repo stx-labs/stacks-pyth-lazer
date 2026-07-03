@@ -4,6 +4,7 @@ import type { ContractSymbolPriceReader } from './contract-symbol-price-reader.t
 import type { OnChainPrice } from './contract-symbol-price-reader.ts';
 import type { PriceUpdateTransactionSubmitter } from './price-update-transaction-submitter.js';
 import BigNumber from 'bignumber.js';
+import * as metrics from '../metrics.ts';
 
 /** Why a submission was triggered (for logging / metrics). */
 type SubmitReason = 'on-demand' | 'heartbeat' | 'deviation';
@@ -89,19 +90,35 @@ export class PriceUpdatePlanner {
    * @param parsed - The parsed payload.
    */
   handlePriceMonitorPayload(evm: Buffer, parsed: ParsedPayload): void {
+    metrics.updatesEvaluated.inc();
+    const timestampUs = BigInt(parsed.timestampUs);
+    metrics.feedPublishLag.observe(Math.max(0, (Date.now() - Number(timestampUs / 1000n)) / 1000));
+
     this.seedBaselines(parsed);
 
-    if (this.inFlight) return;
+    if (this.inFlight) {
+      metrics.submissionsSuppressed.inc({ reason: 'in_flight' });
+      return;
+    }
 
     const now = Date.now();
-    if (now - this.lastSubmitAtMs < this.minSubmitIntervalMs) return; // cadence floor
+    if (now - this.lastSubmitAtMs < this.minSubmitIntervalMs) {
+      metrics.submissionsSuppressed.inc({ reason: 'cadence_floor' }); // faster than block time
+      return;
+    }
 
-    const timestampUs = BigInt(parsed.timestampUs);
-    if (timestampUs <= this.lastSubmittedTimestampUs) return; // not newer; on-chain no-op
+    if (timestampUs <= this.lastSubmittedTimestampUs) {
+      metrics.submissionsSuppressed.inc({ reason: 'not_newer' }); // on-chain no-op
+      return;
+    }
 
     const reason = this.shouldSubmit(now, parsed);
-    if (!reason) return;
+    if (!reason) {
+      metrics.submissionsSuppressed.inc({ reason: 'no_trigger' });
+      return;
+    }
 
+    metrics.submissionsTriggered.inc({ reason: reason.replace('-', '_') });
     this.submitPriceUpdate(evm, parsed, timestampUs, reason);
   }
 
@@ -171,6 +188,7 @@ export class PriceUpdatePlanner {
         this.lastSubmitAtMs = Date.now();
         this.lastSubmittedTimestampUs = timestampUs;
         this.pendingForce = false;
+        metrics.lastSubmitTimestamp.set(this.lastSubmitAtMs / 1000);
         for (const feed of parsed.priceFeeds) {
           if (feed.price != null) {
             this.baselines.set(feed.priceFeedId, {

@@ -87,7 +87,8 @@ All via environment variables (see [`src/env.ts`](src/env.ts) for defaults):
 | Variable | Purpose |
 |---|---|
 | `NETWORK` | `mainnet` \| `testnet`. |
-| `API_HOST` / `API_PORT` | Fastify server bind address. |
+| `API_HOST` / `API_PORT` | Relayer API server bind address. |
+| `PROMETHEUS_HOST` / `PROMETHEUS_PORT` | Bind address for the metrics server (see [Metrics](#metrics)). |
 | `STACKS_NODE_RPC_SCHEME` / `STACKS_NODE_RPC_HOST` / `STACKS_NODE_RPC_PORT` | Stacks node RPC endpoint (`http` or `https`). |
 | `PYTH_API_KEY` | Pyth Lazer subscription token. |
 | `PYTH_LAZER_CHANNEL` | `real_time` \| `fixed_rate_50ms` \| `fixed_rate_200ms` \| `fixed_rate_1000ms`. |
@@ -102,6 +103,22 @@ All via environment variables (see [`src/env.ts`](src/env.ts) for defaults):
 | `PRICE_UPDATE_DEVIATION_BPS` | Deviation trigger threshold (bps). |
 | `PRICE_UPDATE_HEARTBEAT_MS` | Heartbeat trigger interval. |
 | `PRICE_UPDATE_MIN_SUBMIT_INTERVAL_MS` | Cadence floor between submissions. |
+
+## Metrics
+
+Prometheus metrics are exposed on a **separate server** at `GET /metrics`, bound to
+`PROMETHEUS_HOST:PROMETHEUS_PORT` (default `0.0.0.0:9153`) — kept off the public API
+port so it can stay internal to the network/pod. Exposition includes:
+
+- custom `relayer_*` metrics for each pipeline stage (see [`src/metrics.ts`](src/metrics.ts));
+- default `prom-client` process metrics (event-loop lag, heap, GC);
+- per-route HTTP metrics for the relayer API.
+
+Key signals to alert on: `relayer_last_submit_timestamp_seconds` (staleness — the core
+oracle SLI; alert as it approaches governance's stale-price threshold),
+`relayer_wallet_balance_microstx` (the account can't submit once it's dry),
+`relayer_pyth_connection_up` / `relayer_pyth_last_message_timestamp_seconds` (stream
+liveness), and `relayer_tx_rejections_total` (broadcast failures).
 
 ## Development
 
