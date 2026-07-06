@@ -23,8 +23,8 @@ export const FeedIdSchema = Type.Integer({
  * `feed_id` (resolved to a symbol server-side). Exactly one shape must match.
  */
 export const PriceUpdateBodySchema = Type.Union([
-  Type.Object({ symbol: CryptoSymbolSchema }),
-  Type.Object({ feed_id: FeedIdSchema }),
+  Type.Object({ symbol: CryptoSymbolSchema }, { additionalProperties: false }),
+  Type.Object({ feed_id: FeedIdSchema }, { additionalProperties: false }),
 ]);
 
 export const PriceUpdateResponseSchema = Type.Object({
