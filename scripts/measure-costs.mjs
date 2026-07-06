@@ -1,6 +1,6 @@
 // Measure execution costs of the oracle hot paths against REAL captured updates,
 // and express them as a fraction of a Stacks block budget. Reproducible input for
-// docs/cost-review.md. Run from the clarity/ workspace:
+// docs/cost-review.md. Run from the repo root:
 //
 //   node scripts/measure-costs.mjs
 //
