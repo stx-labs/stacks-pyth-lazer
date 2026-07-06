@@ -22,10 +22,20 @@ export const FeedIdSchema = Type.Integer({
  * Request body: a caller supplies **either** a `Crypto.` symbol **or** a numeric
  * `feed_id` (resolved to a symbol server-side). Exactly one shape must match.
  */
-export const PriceUpdateBodySchema = Type.Union([
-  Type.Object({ symbol: CryptoSymbolSchema }, { additionalProperties: false }),
-  Type.Object({ feed_id: FeedIdSchema }, { additionalProperties: false }),
-]);
+export const PriceUpdateBodySchema = Type.Object(
+  {
+    symbol: Type.Optional(CryptoSymbolSchema),
+    feed_id: Type.Optional(FeedIdSchema),
+  },
+  {
+    // Exactly one of `symbol` / `feed_id`. Declaring both on one object (rather than a union of
+    // single-key objects) keeps Fastify's ajv `removeAdditional` from silently stripping the
+    // "other" field; `min/maxProperties` then enforce that precisely one is supplied.
+    additionalProperties: false,
+    minProperties: 1,
+    maxProperties: 1,
+  }
+);
 
 export const PriceUpdateResponseSchema = Type.Object({
   message: Type.String(),

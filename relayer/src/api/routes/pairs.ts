@@ -27,11 +27,12 @@ export const PairsRoutes: FastifyPluginCallback<ApiConfig, Server, TypeBoxTypePr
     async (request, reply) => {
       const { pythSymbolMonitor } = config;
 
-      // Callers pass a symbol or a feed id; resolve a feed id to its symbol.
+      // The schema guarantees exactly one of `symbol` / `feed_id`; resolve a feed
+      // id to its symbol.
       let symbol: string;
-      if ('symbol' in request.body) {
+      if (request.body.symbol !== undefined) {
         symbol = request.body.symbol;
-      } else {
+      } else if (request.body.feed_id !== undefined) {
         const resolved = pythSymbolMonitor.symbolForFeedId(request.body.feed_id);
         if (!resolved) {
           return reply.status(400).send({
@@ -40,6 +41,12 @@ export const PairsRoutes: FastifyPluginCallback<ApiConfig, Server, TypeBoxTypePr
           });
         }
         symbol = resolved;
+      } else {
+        // Unreachable: `minProperties` requires one to be present.
+        return reply.status(400).send({
+          error: 'invalid_request',
+          message: 'Provide exactly one of `symbol` or `feed_id`',
+        });
       }
 
       // Add to the monitored set (validated against the Lazer catalog).

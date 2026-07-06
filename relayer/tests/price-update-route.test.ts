@@ -112,4 +112,16 @@ describe('POST /price-update', () => {
     assert.equal(res.statusCode, 400);
     assert.equal(symbolForFeedId.mock.callCount(), 0, 'never reaches the handler');
   });
+
+  test('rejects a body with both symbol and feed_id', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: URL,
+      payload: { symbol: 'Crypto.BTC/USD', feed_id: 1 },
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(requestPriceUpdate.mock.callCount(), 0, 'never reaches the handler');
+    assert.equal(symbolForFeedId.mock.callCount(), 0);
+  });
 });
