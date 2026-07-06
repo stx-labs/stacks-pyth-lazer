@@ -30,10 +30,10 @@ function makeFakeClient(): FakeClient {
     }),
     addAllConnectionsDownListener: mock.fn(),
     addConnectionRestoredListener: mock.fn(),
-    // The monitor loads this at start() to validate symbols; `symbol` mirrors
-    // `name` here so either identifier form resolves.
+    // The monitor loads this at start() to validate symbols and build the
+    // feed-id map; `symbol` mirrors `name`, and `pyth_lazer_id` is the 1-based index.
     getSymbols: mock.fn(async () =>
-      catalogSymbols.map(name => ({ name, symbol: name }))
+      catalogSymbols.map((name, i) => ({ name, symbol: name, pyth_lazer_id: i + 1 }))
     ),
     shutdown: mock.fn(),
   };
@@ -181,6 +181,24 @@ describe('PythSymbolMonitor', () => {
     assert.equal(accepted, false);
     assert.equal(client.subscribe.mock.callCount(), 1, 'subscription untouched');
     assert.ok(!lastSubscribeArg(client).symbols.includes('Crypto.NOPE/USD'));
+  });
+
+  test('symbolForFeedId resolves a known crypto feed id to its symbol', async () => {
+    const { monitor } = await startMonitor();
+    // Fake catalog assigns 1-based ids; 'Crypto.BTC/USD' is the first entry.
+    assert.equal(monitor.symbolForFeedId(1), 'Crypto.BTC/USD');
+  });
+
+  test('symbolForFeedId returns undefined for an unknown feed id', async () => {
+    const { monitor } = await startMonitor();
+    assert.equal(monitor.symbolForFeedId(99999), undefined);
+  });
+
+  test('symbolForFeedId excludes non-crypto feeds', async () => {
+    catalogSymbols = ['Crypto.BTC/USD', 'Equity.AAPL/USD']; // ids 1 and 2
+    const { monitor } = await startMonitor();
+    assert.equal(monitor.symbolForFeedId(1), 'Crypto.BTC/USD');
+    assert.equal(monitor.symbolForFeedId(2), undefined, 'equity feed is not resolvable');
   });
 
   test('accepts any symbol when the catalog fails to load (fails open)', async () => {

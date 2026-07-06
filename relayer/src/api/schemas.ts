@@ -11,7 +11,21 @@ export const CryptoSymbolSchema = Type.String({
   examples: ['Crypto.BTC/USD'],
 });
 
-export const PriceUpdateBodySchema = Type.Object({ symbol: CryptoSymbolSchema });
+/** A Pyth Lazer numeric feed id, resolved to a crypto symbol via the catalog. */
+export const FeedIdSchema = Type.Integer({
+  minimum: 0,
+  description: 'Pyth Lazer numeric feed id',
+  examples: [1],
+});
+
+/**
+ * Request body: a caller supplies **either** a `Crypto.` symbol **or** a numeric
+ * `feed_id` (resolved to a symbol server-side). Exactly one shape must match.
+ */
+export const PriceUpdateBodySchema = Type.Union([
+  Type.Object({ symbol: CryptoSymbolSchema }),
+  Type.Object({ feed_id: FeedIdSchema }),
+]);
 
 export const PriceUpdateResponseSchema = Type.Object({
   message: Type.String(),

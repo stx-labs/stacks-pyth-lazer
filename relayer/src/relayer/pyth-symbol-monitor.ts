@@ -83,6 +83,11 @@ export class PythSymbolMonitor {
    * rather than blocking the relayer.
    */
   private validSymbols?: Set<string>;
+  /**
+   * Maps a numeric Lazer feed id to its subscribe symbol, for `feed_id`-based
+   * requests. Crypto feeds only, so resolution stays crypto-only like the symbol path.
+   */
+  private symbolByFeedId?: Map<number, string>;
   /** Periodic catalog-refresh timer. */
   private catalogTimer?: ReturnType<typeof setInterval>;
   /** Pending debounced subscription refresh, if any. */
@@ -180,6 +185,13 @@ export class PythSymbolMonitor {
       const catalog = await this.pythClient.getSymbols();
       // Accept either identifier form; we validate the literal string we subscribe with.
       this.validSymbols = new Set(catalog.flatMap(entry => [entry.name, entry.symbol]));
+      // Feed id -> subscribe symbol, crypto feeds only (mirrors the symbol path's
+      // `Crypto.`-only policy, so a non-crypto feed_id resolves to nothing).
+      this.symbolByFeedId = new Map(
+        catalog
+          .filter(entry => entry.name.startsWith('Crypto.'))
+          .map(entry => [entry.pyth_lazer_id, entry.name])
+      );
       metrics.catalogLoads.inc({ result: 'success' });
       metrics.catalogSymbols.set(this.validSymbols.size);
       logger.info(
@@ -241,6 +253,16 @@ export class PythSymbolMonitor {
     this.symbolCache.set(symbol, true);
     this.scheduleRefresh();
     return true;
+  }
+
+  /**
+   * Resolves a numeric Lazer feed id to its subscribe symbol.
+   * @param feedId - Pyth Lazer numeric feed id.
+   * @returns The crypto symbol, or `undefined` if the catalog is not loaded yet or
+   *   the id is unknown / not a crypto feed.
+   */
+  symbolForFeedId(feedId: number): string | undefined {
+    return this.symbolByFeedId?.get(feedId);
   }
 
   /**

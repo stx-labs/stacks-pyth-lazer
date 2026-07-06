@@ -25,10 +25,25 @@ export const PairsRoutes: FastifyPluginCallback<ApiConfig, Server, TypeBoxTypePr
       },
     },
     async (request, reply) => {
-      const { symbol } = request.body;
+      const { pythSymbolMonitor } = config;
+
+      // Callers pass a symbol or a feed id; resolve a feed id to its symbol.
+      let symbol: string;
+      if ('symbol' in request.body) {
+        symbol = request.body.symbol;
+      } else {
+        const resolved = pythSymbolMonitor.symbolForFeedId(request.body.feed_id);
+        if (!resolved) {
+          return reply.status(400).send({
+            error: 'unknown_feed_id',
+            message: `Unknown or unsupported Pyth Lazer feed id: ${request.body.feed_id}`,
+          });
+        }
+        symbol = resolved;
+      }
 
       // Add to the monitored set (validated against the Lazer catalog).
-      const accepted = config.pythSymbolMonitor.requestPriceUpdate(symbol);
+      const accepted = pythSymbolMonitor.requestPriceUpdate(symbol);
       if (!accepted) {
         return reply.status(400).send({
           error: 'unknown_symbol',
