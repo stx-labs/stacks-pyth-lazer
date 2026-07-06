@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-shot: generate a fresh 24-word testnet deployer wallet. Run from clarity/.
+// One-shot: generate a fresh 24-word testnet deployer wallet. Run from the repo root.
 // Writes the mnemonic into settings/Testnet.toml (seeding it from a template if
 // absent, since it is gitignored) for clarinet to read, and mirrors it into .env.
 // The mnemonic is never printed. Refuses to overwrite an existing real mnemonic
@@ -21,10 +21,10 @@ const ENV = ".env";
 const PLACEHOLDER = "<YOUR PRIVATE TESTNET MNEMONIC HERE>";
 const force = process.env.FORCE === "1";
 
-// Paths are cwd-relative (repo convention: scripts run from clarity/). Bail with a
+// Paths are cwd-relative (repo convention: scripts run from the repo root). Bail with a
 // clear message if we're elsewhere, instead of reading/writing the wrong files.
 if (!existsSync("Clarinet.toml")) {
-  console.error("Run this from the clarity/ directory (no Clarinet.toml in the current directory).");
+  console.error("Run this from the repo root (no Clarinet.toml in the current directory).");
   process.exit(1);
 }
 
