@@ -1,8 +1,8 @@
-# Migration guide — Pyth bridge → Pyth Lazer oracle
+# Pyth Legacy → Pyth Lazer Migration guide
 
-For consumers moving off the Wormhole-based **Pyth bridge** (`pyth-oracle-v4` /
-`pyth-storage-v4`, [stacks-pyth-bridge](https://github.com/stx-labs/stacks-pyth-bridge))
-to the new **Pyth Lazer** oracle set in this repo.
+This guide is for users of the current Wormhole-based **Pyth bridge** ([stacks-pyth-bridge](https://github.com/stx-labs/stacks-pyth-bridge)),
+which will be discontinued on 2026-07-31.
+You must migrate to the new **Pyth Lazer** contracts in this repo before then!
 
 Two things change: you no longer submit price updates, and the stored price tuple has a
 new shape. Reading prices is otherwise similar.
@@ -22,16 +22,20 @@ to stream Lazer data). You only read — there is no submit step in your path.
 
 ## 2. Reading prices
 
-Reads are now **read-only functions on the storage contract**, called directly with just
-the feed id (no storage-contract argument):
+Read **directly from the storage contract** — the same two read-only functions as the old
+`pyth-storage-v4`, with identical behavior. Only the feed-id type changes (`(buff 32)` →
+`uint`, see below); there is no storage-contract argument.
 
-| Purpose | Old (`pyth-oracle-v4`) | New (`pyth-lazer-storage`) |
+| Function | Staleness check? | vs old `pyth-storage-v4` |
 |---|---|---|
-| Raw read | `read-price-feed(id, storage)` | `get-price(id)` |
-| Fresh read (errors if stale) | `get-price(id, storage)` | `read-price-with-staleness-check(id)` |
+| `get-price(id)` | No | unchanged |
+| `read-price-with-staleness-check(id)` | Yes — errors if stale | unchanged |
 
-> ⚠️ **`get-price` changed meaning.** On the old oracle it was staleness-checked; the new
-> `get-price` is **not**. Use `read-price-with-staleness-check` to keep the freshness guarantee.
+**Reads no longer route through the oracle.** The old bridge also exposed read wrappers on
+`pyth-oracle-v4` that took the storage contract as a trait argument, because governance
+could swap the active storage contract. The new storage is immutable — its address never
+moves — so you read it directly. (If you specifically called `pyth-oracle-v4.get-price` —
+the one wrapper that *did* add a staleness check — use `read-price-with-staleness-check`.)
 
 **The feed id type changed** from a 32-byte Hermes hex id to a `uint` Lazer id. Map between
 them with the `hermes_id` field of the
