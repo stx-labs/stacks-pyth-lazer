@@ -37,7 +37,7 @@ function trust() {
 // Verify through the oracle (the sole entry; the decoder rejects direct callers).
 function decode(payload: Uint8Array) {
   const update = buildEvmUpdate(payload);
-  return simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef], deployer)
+  return simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef, Cl.none()], deployer)
     .result;
 }
 

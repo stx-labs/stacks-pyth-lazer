@@ -71,7 +71,7 @@
   }
 ) (list))
 
-;; Time before prices go stale, in seconds
+;; Default staleness window (seconds) -- used when verify-price-feeds is passed `none` for max-age
 (define-data-var stale-price-threshold uint (if is-in-mainnet
   u7200 ;;  2 hours
   u157680000 ;; ~5 years
@@ -296,11 +296,13 @@
 
 ;;;; Price verification (public entry)
 
-;; Verify a Lazer update through the authorized decoder and return the parsed feeds.
-;; Public (not read-only) because it dispatches via a trait and may charge a fee.
+;; Verify a Lazer update through authorized decoder and return the parsed feeds
+;; Public (not read-only) because it dispatches via a trait and may charge a fee
+;; `max-age` (seconds) is the caller's freshness tolerance; `none` uses the governance default
 (define-public (verify-price-feeds
     (update (buff 8192))
     (decoder-contract <decoder-trait>)
+    (max-age (optional uint))
   )
   (begin
     ;; Only the authorized decoder is accepted
@@ -309,7 +311,7 @@
         ;; signature, trusted-signer, and pause checks all run inside the decoder
         (decoded (try! (contract-call? decoder-contract decode-and-verify-price-feeds update)))
         (publish-time-seconds (/ (get timestamp decoded) MICROS_PER_SECOND))
-        (threshold (var-get stale-price-threshold))
+        (threshold (default-to (var-get stale-price-threshold) max-age))
       )
       ;; Reject stale updates. Written additively (publish + threshold >= now) so a Lazer
       ;; publish-time running ahead of the current block time can't underflow the uint.

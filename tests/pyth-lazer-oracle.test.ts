@@ -53,8 +53,8 @@ const feed = (id: number, price: bigint, exponent: bigint, confidence: bigint, p
   props: [[PROP.Price, price], [PROP.Exponent, exponent], [PROP.Confidence, confidence], [PROP.PublisherCount, pub]],
 });
 
-const verify = (update: Uint8Array, sender = wallet1) =>
-  simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef], sender);
+const verify = (update: Uint8Array, sender = wallet1, maxAge: ClarityValue = Cl.none()) =>
+  simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef, maxAge], sender);
 
 // Expected decoded feed: required fields + confidence present; every other optional `none`
 // (the updates these tests build carry only the base properties).
@@ -127,6 +127,21 @@ describe("pyth-lazer-oracle: verify-price-feeds", () => {
     // publish-time 0 with a zero window: 0 + 0 >= now is false for any positive block time.
     expect(verify(makeUpdate([feed(1, 1n, 0n, 1n, 5n)], undefined, 0n)).result)
       .toBeErr(Cl.uint(ERR_STALE_PRICE));
+  });
+
+  it("honors a caller max-age tighter than the global default", () => {
+    bootstrap(); // global window is wide (fresh)
+    // an ancient (publish-time 0) update the wide global default would accept, rejected by a 1s max-age
+    expect(verify(makeUpdate([feed(1, 1n, 0n, 1n, 5n)], undefined, 0n), wallet1, Cl.some(Cl.uint(1n))).result)
+      .toBeErr(Cl.uint(ERR_STALE_PRICE));
+  });
+
+  it("honors a caller max-age looser than the global default", () => {
+    bootstrap();
+    simnet.callPublicFn(GOV, "set-stale-price-threshold", [Cl.uint(0n)], deployer); // global rejects everything
+    // a wide max-age accepts the update the zero global default would reject
+    expect(verify(makeUpdate([feed(1, 1n, 0n, 1n, 5n)]), wallet1, Cl.some(Cl.uint(FRESH_WINDOW))).result)
+      .toBeOk(expectedDecoded([expectedFeed(1, 1n, 0n, 1n, 5n)]));
   });
 
   it("rejects updates while paused (kill-switch), then resumes after unpause", () => {

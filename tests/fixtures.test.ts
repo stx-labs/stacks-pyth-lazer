@@ -75,8 +75,9 @@ function trustAll() {
 }
 
 // Verify through the oracle (the sole entry; the decoder rejects direct callers).
+// max-age none -> uses the (widened) governance default set in trustAll.
 const decode = (update: Uint8Array) =>
-  simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef], deployer).result;
+  simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef, Cl.none()], deployer).result;
 
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));

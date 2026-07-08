@@ -38,13 +38,13 @@ gated to the oracle, so `verify-price-feeds` is the only way in.
 
 | operation | runtime | read_cnt | read_len | write_cnt | write_len |
 |---|--:|--:|--:|--:|--:|
-| `verify-price-feeds` (3 feeds) | 9,626,886 | 19 | 45,943 | 0 | 0 |
-| `verify-price-feeds` (16 feeds) | 41,867,978 | 19 | 45,943 | 0 | 0 |
+| `verify-price-feeds` (3 feeds) | 9,627,800 | 19 | 46,531 | 0 | 0 |
+| `verify-price-feeds` (16 feeds) | 41,868,892 | 19 | 46,531 | 0 | 0 |
 
 `verify-price-feeds` is the consumer's transaction and the sole verification entry: validate
 the blessed decoder, dispatch to it (signature + trusted-signer + pause checks all run inside
-the decoder), enforce staleness, charge the fee, and return the parsed feeds. Being verify-only,
-it performs **no writes**.
+the decoder), enforce the caller's staleness window (`max-age`, or the governance default),
+charge the fee, and return the parsed feeds. Being verify-only, it performs **no writes**.
 
 ## Linear model (runtime)
 
@@ -60,7 +60,7 @@ per-feed worst case; sparser feeds cost less.
 |---|--:|
 | **runtime** | **0.8374%** |
 | read_count | 0.1267% |
-| read_length | 0.0459% |
+| read_length | 0.0465% |
 | write_count | 0.0000% |
 | write_length | 0.0000% |
 

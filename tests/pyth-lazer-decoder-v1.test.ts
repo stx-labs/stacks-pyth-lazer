@@ -80,7 +80,7 @@ describe("pyth-lazer-decoder-v1: verify-update (trusted-signer check, via the or
   // check before payload parsing, so a throwaway payload is fine. The trusted-accept path is
   // exercised end-to-end in the oracle + golden-fixture suites.
   const verify = (update: Uint8Array) =>
-    simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef], deployer).result;
+    simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef, Cl.none()], deployer).result;
 
   it("rejects a direct (non-oracle) caller", () => {
     trust(TEST_PUBKEY, FAR_FUTURE); // even a trusted signer can't reach it directly

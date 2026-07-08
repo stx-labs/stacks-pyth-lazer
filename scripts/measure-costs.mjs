@@ -55,8 +55,8 @@ function measure(label, res) {
 // end-to-end oracle verify -- the consumer's tx (verify + parse + fee path; verify-only, no
 // writes). The decoder isn't measured standalone: `verify-update` is gated to the oracle, so
 // this is the only verification path.
-measure(`verify-price-feeds END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f3), decoderRef], relayer));
-measure(`verify-price-feeds END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f16), decoderRef], relayer));
+measure(`verify-price-feeds END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f3), decoderRef, Cl.none()], relayer));
+measure(`verify-price-feeds END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f16), decoderRef, Cl.none()], relayer));
 
 const limit = measurements[0].limit;
 const dims = [

@@ -133,13 +133,13 @@ describe("pyth-lazer-decoder-v1: REAL Lazer evm golden fixtures (byte-order anch
 
   it("STAGING: decode-and-verify accepts the update end-to-end when its signer is trusted", () => {
     trust(STAGING_SIGNER);
-    const { result } = simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(STAGING_UPDATE), decoderRef], deployer);
+    const { result } = simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(STAGING_UPDATE), decoderRef, Cl.none()], deployer);
     expect(result).toBeOk(STAGING_DECODE);
   });
 
   it("PRODUCTION: decode-and-verify matches the SDK decode for a real multi-feed update", () => {
     trust(PROD_SIGNER);
-    const { result } = simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(PROD_UPDATE), decoderRef], deployer);
+    const { result } = simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(PROD_UPDATE), decoderRef, Cl.none()], deployer);
     expect(result).toBeOk(PROD_DECODE);
   });
 
@@ -150,7 +150,7 @@ describe("pyth-lazer-decoder-v1: REAL Lazer evm golden fixtures (byte-order anch
 
   it("rejects a real update when its signer is not trusted (the signer path is genuinely exercised)", () => {
     // No trust() seeding: an empty trusted-signer set must reject even valid bytes.
-    const { result } = simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(PROD_UPDATE), decoderRef], deployer);
+    const { result } = simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(PROD_UPDATE), decoderRef, Cl.none()], deployer);
     expect(result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 });
