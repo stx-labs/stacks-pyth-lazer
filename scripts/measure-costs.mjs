@@ -28,6 +28,9 @@ simnet.callPublicFn(
   [Cl.list([Cl.tuple({ pubkey: Cl.buffer(hexToBytes(PROD_SIGNER)), "expires-at": Cl.uint(FAR_FUTURE) })])],
   deployer,
 );
+// Verify-only enforces staleness on the oracle path; widen the window so these fixed-
+// timestamp fixtures stay fresh under simnet's (non-fixed) wall clock.
+simnet.callPublicFn(GOV, "set-stale-price-threshold", [Cl.uint(100_000_000_000_000n)], deployer);
 const decoderRef = Cl.contractPrincipal(deployer, DECODER);
 
 const load = (f) => JSON.parse(readFileSync(`tests/fixtures/captured/${f}`, "utf8"));
@@ -39,7 +42,7 @@ const nF16 = f16.parsed.priceFeeds.length;
 const updBuf = (f) => Cl.buffer(hexToBytes(f.evmHex));
 // decode-and-verify-price-feeds is read-only (relayers reach it through the oracle),
 // but the SDK meters read-only calls too, so we measure it directly for the decode
-// linear model. verify-and-update-price-feeds is the public end-to-end relayer tx.
+// linear model. verify-price-feeds is the public end-to-end verify-and-return entry.
 
 const measurements = [];
 function measure(label, res) {
@@ -52,9 +55,9 @@ function measure(label, res) {
 // full decode-and-verify (signature + trust + parse)
 measure(`decode-and-verify (${nF3} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f3)], deployer));
 measure(`decode-and-verify (${nF16} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f16)], deployer));
-// end-to-end oracle submit (verify + parse + storage write + fee path) -- the relayer's tx
-measure(`verify-and-update END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [updBuf(f3), decoderRef], relayer));
-measure(`verify-and-update END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [updBuf(f16), decoderRef], relayer));
+// end-to-end oracle verify (verify + parse + fee path; verify-only, no storage write)
+measure(`verify-price-feeds END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f3), decoderRef], relayer));
+measure(`verify-price-feeds END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f16), decoderRef], relayer));
 
 const limit = measurements[0].limit;
 const dims = [
@@ -73,7 +76,7 @@ for (const m of measurements) {
 }
 
 // % of a block for the end-to-end 16-feed submit (the worst-case relayer tx)
-const e2e16 = measurements.find((m) => m.label.startsWith("verify-and-update END-TO-END (" + nF16)).t;
+const e2e16 = measurements.find((m) => m.label.startsWith("verify-price-feeds END-TO-END (" + nF16)).t;
 console.log(`\nEnd-to-end ${nF16}-feed submit as a fraction of one block:`);
 for (const [k, h] of dims) console.log(`  ${h.padEnd(10)} ${(100 * e2e16[k] / limit[k]).toFixed(4)}%`);
 const perBlock = Math.floor(limit.runtime / e2e16.runtime);
