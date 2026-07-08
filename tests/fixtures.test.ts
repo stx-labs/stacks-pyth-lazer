@@ -28,8 +28,10 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!; // governance admin
 
+const ORACLE = "pyth-lazer-oracle";
 const GOV = "pyth-lazer-oracle";
 const DECODER = "pyth-lazer-decoder-v1";
+const decoderRef = Cl.contractPrincipal(deployer, DECODER);
 
 const FAR_FUTURE = 100_000_000_000n;
 const PROD_SIGNER = "03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b";
@@ -68,10 +70,13 @@ function trustAll() {
     ])],
     deployer,
   );
+  // widen the staleness window so the fixed-timestamp fixtures stay fresh through the oracle
+  simnet.callPublicFn(ORACLE, "set-stale-price-threshold", [Cl.uint(100_000_000_000_000n)], deployer);
 }
 
+// Verify through the oracle (the sole entry; the decoder rejects direct callers).
 const decode = (update: Uint8Array) =>
-  simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer).result;
+  simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef], deployer).result;
 
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));

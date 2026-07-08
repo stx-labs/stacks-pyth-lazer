@@ -6,7 +6,9 @@ const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
 
 const DECODER = "pyth-lazer-decoder-v1";
+const ORACLE = "pyth-lazer-oracle";
 const GOV = "pyth-lazer-oracle";
+const decoderRef = Cl.contractPrincipal(deployer, DECODER);
 
 const FAR_FUTURE = 100_000_000_000n;
 const TS = 1_700_000_000_000_000n; // microseconds
@@ -28,11 +30,14 @@ function trust() {
     [Cl.list([Cl.tuple({ pubkey: Cl.buffer(TEST_PUBKEY), "expires-at": Cl.uint(FAR_FUTURE) })])],
     deployer,
   );
+  // widen the staleness window so the fixed test timestamp stays fresh through the oracle
+  simnet.callPublicFn(ORACLE, "set-stale-price-threshold", [Cl.uint(100_000_000_000_000n)], deployer);
 }
 
+// Verify through the oracle (the sole entry; the decoder rejects direct callers).
 function decode(payload: Uint8Array) {
   const update = buildEvmUpdate(payload);
-  return simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer)
+  return simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef], deployer)
     .result;
 }
 

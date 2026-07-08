@@ -66,6 +66,7 @@
 (define-constant ERR_OVERLAY_PRESENT (err u2103))
 (define-constant ERR_INVALID_SIGNATURE (err u2104))
 (define-constant ERR_UNTRUSTED_SIGNER (err u2105))
+(define-constant ERR_UNAUTHORIZED_CALLER (err u2106)) ;; verify-update is callable only by pyth-lazer-oracle
 
 ;; Errors: Lazer payload / feeds (Phase 2)
 (define-constant ERR_INVALID_PAYLOAD_MAGIC (err u2201))
@@ -115,8 +116,11 @@
 ;; Recover signer and check against trusted signers
 (define-read-only (verify-update (update (buff 8192)))
   (begin
-    ;; Break-glass kill-switch: halt verification while paused. Gating here (the trusted-signer
-    ;; boundary) covers both the oracle path and direct decode-and-verify-price-feeds calls.
+    ;; Verification funnels through pyth-lazer-oracle (the sole entry) so its fee/staleness
+    ;; guards can't be bypassed. `recover-signer` and `decode-lazer-payload` stay open -- they
+    ;; prove nothing without this trusted check, so they can't be composed to bypass it.
+    (asserts! (is-eq contract-caller .pyth-lazer-oracle) ERR_UNAUTHORIZED_CALLER)
+    ;; Break-glass kill-switch: halt verification while paused.
     (try! (contract-call? .pyth-lazer-oracle assert-active))
     (let ((recovered (try! (recover-signer update))))
       (asserts! (is-signer-trusted (get signer recovered)) ERR_UNTRUSTED_SIGNER)

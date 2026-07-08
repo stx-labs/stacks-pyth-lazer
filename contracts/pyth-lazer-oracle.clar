@@ -5,8 +5,8 @@
 ;; and the public price-verification entry point (`verify-price-feeds`).
 ;;
 ;; Verify-only: `verify-price-feeds` verifies a signed update through the authorized
-;; (swappable) decoder and returns the parsed feeds for in-transaction use. Consumers may
-;; instead call the decoder's `decode-and-verify-price-feeds` directly (free read-only).
+;; (swappable) decoder and returns the parsed feeds for in-transaction use. It is the sole
+;; verification entry point -- the decoder gates `verify-update` to this contract.
 ;;
 ;; Role-based access control (similar to stx-labs/usdcx-token):
 ;;   - `governance`: manage signers / fee / decoder / stale-threshold / roles

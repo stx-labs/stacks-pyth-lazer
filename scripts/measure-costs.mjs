@@ -52,10 +52,9 @@ function measure(label, res) {
   return res;
 }
 
-// full decode-and-verify (signature + trust + parse)
-measure(`decode-and-verify (${nF3} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f3)], deployer));
-measure(`decode-and-verify (${nF16} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f16)], deployer));
-// end-to-end oracle verify (verify + parse + fee path; verify-only, no writes)
+// end-to-end oracle verify -- the consumer's tx (verify + parse + fee path; verify-only, no
+// writes). The decoder isn't measured standalone: `verify-update` is gated to the oracle, so
+// this is the only verification path.
 measure(`verify-price-feeds END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f3), decoderRef], relayer));
 measure(`verify-price-feeds END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f16), decoderRef], relayer));
 
@@ -82,11 +81,10 @@ for (const [k, h] of dims) console.log(`  ${h.padEnd(10)} ${(100 * e2e16[k] / li
 const perBlock = Math.floor(limit.runtime / e2e16.runtime);
 console.log(`  -> runtime is the binding dimension; ~${perBlock} such submits would fill a block's runtime`);
 
-// linear model from the two decode-and-verify points
-const dv3 = measurements.find((m) => m.label === `decode-and-verify (${nF3} feeds)`).t;
-const dv16 = measurements.find((m) => m.label === `decode-and-verify (${nF16} feeds)`).t;
-const perFeed = (dv16.runtime - dv3.runtime) / (nF16 - nF3);
-const overhead = dv3.runtime - perFeed * nF3;
-console.log(`\ndecode-and-verify runtime linear model: ~${Math.round(overhead)} fixed (signature+header) + ~${Math.round(perFeed)} per feed`);
+// linear model from the two end-to-end points
+const e2e3 = measurements.find((m) => m.label === `verify-price-feeds END-TO-END (${nF3} feeds)`).t;
+const perFeed = (e2e16.runtime - e2e3.runtime) / (nF16 - nF3);
+const overhead = e2e3.runtime - perFeed * nF3;
+console.log(`\nverify-price-feeds runtime linear model: ~${Math.round(overhead)} fixed (signature+header) + ~${Math.round(perFeed)} per feed`);
 
 process.exit(0);
