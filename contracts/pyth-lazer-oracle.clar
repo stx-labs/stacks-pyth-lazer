@@ -298,7 +298,7 @@
 
 ;; Verify a Lazer update through authorized decoder and return the parsed feeds
 ;; Public (not read-only) because it dispatches via a trait and may charge a fee
-;; `max-age` (seconds) is the caller's freshness tolerance; `none` uses the governance default
+;; `max-age`: Staleness threshold in seconds. `none` => Governance default
 (define-public (verify-price-feeds
     (update (buff 8192))
     (decoder-contract <decoder-trait>)
