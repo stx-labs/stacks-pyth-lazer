@@ -6,7 +6,7 @@ const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!; // holds both roles + is the default fee recipient
 const wallet1 = accounts.get("wallet_1")!; // holds no roles
 
-const GOV = "pyth-lazer-governance";
+const GOV = "pyth-lazer-oracle";
 const ERR_UNAUTHORIZED = 4003;
 const ERR_PAUSED = 4004;
 const ERR_CANNOT_CHANGE_OWN_GOVERNANCE = 4005;

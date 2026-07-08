@@ -1,13 +1,14 @@
 # Cost review — Pyth Lazer oracle
 
 Execution-cost analysis of the on-chain hot paths, measured **2026-07-07** against the
-**verify-only** `decoder-v1` + `oracle-v1` (no storage layer): the oracle validates the
-governance-blessed decoder, dispatches to `decode-and-verify-price-feeds`, enforces the
-staleness window + fee, and returns the parsed feeds. Nothing is written on-chain.
+**verify-only** `decoder-v1` + `pyth-lazer-oracle` (governance and the verify entry merged
+into one immutable contract; no storage layer): the oracle validates the blessed decoder,
+dispatches to `decode-and-verify-price-feeds`, enforces the staleness window + fee, and
+returns the parsed feeds. Nothing is written on-chain.
 
 **TL;DR:** the worst-case transaction — a full 16-feed update verified end-to-end through
 the oracle — costs **~41.9M runtime, ≈0.84% of a Stacks block**. Runtime is the only
-binding dimension; the write dimensions are now **zero** (verify-only stores nothing).
+binding dimension; the write dimensions are **zero** (verify-only stores nothing).
 Roughly **119 max-size verifies fit in one block's runtime budget**, far above any
 realistic rate. No optimization required.
 
@@ -40,21 +41,22 @@ end-to-end entry point. Two feed counts give a linear (fixed + per-feed) model.
 
 | operation | runtime | read_cnt | read_len | write_cnt | write_len |
 |---|--:|--:|--:|--:|--:|
-| `decode-and-verify` (3 feeds) | 9,581,786 | 12 | 33,295 | 0 | 0 |
-| `decode-and-verify` (16 feeds) | 41,791,990 | 12 | 33,295 | 0 | 0 |
-| `verify-price-feeds` end-to-end (3 feeds) | 9,636,703 | 28 | 55,929 | 0 | 0 |
-| `verify-price-feeds` end-to-end (16 feeds) | 41,877,795 | 28 | 55,929 | 0 | 0 |
+| `decode-and-verify` (3 feeds) | 9,586,502 | 12 | 38,011 | 0 | 0 |
+| `decode-and-verify` (16 feeds) | 41,796,706 | 12 | 38,011 | 0 | 0 |
+| `verify-price-feeds` end-to-end (3 feeds) | 9,627,103 | 19 | 47,031 | 0 | 0 |
+| `verify-price-feeds` end-to-end (16 feeds) | 41,868,195 | 19 | 47,031 | 0 | 0 |
 
 `verify-price-feeds` is the consumer's transaction: validate the blessed decoder, verify +
 parse (via `contract-call?`), enforce staleness, charge the fee, return the feeds. It adds
-only a thin fixed overhead over the decoder's read-only path (~86K runtime + a few governance
-reads for the decoder-authorization / staleness / fee logic) and — being verify-only —
-performs **no writes**. `decode-and-verify-price-feeds` is read-only (the oracle reaches it
-via `contract-call?`); the SDK meters read-only calls, so it is timed directly.
+only a thin fixed overhead over the decoder's read-only path (~71K runtime + ~7 reads for
+the decoder-authorization / staleness / fee logic — all intra-contract now that governance
+and the oracle are one contract) and — being verify-only — performs **no writes**.
+`decode-and-verify-price-feeds` is read-only (the oracle reaches it via `contract-call?`);
+the SDK meters read-only calls, so it is timed directly.
 
 ## Linear model (runtime)
 
-- **Decode only:** ≈ **2.15M fixed** (keccak256 + secp256k1 recovery + governance
+- **Decode only:** ≈ **2.15M fixed** (keccak256 + secp256k1 recovery + the oracle
   trusted-signer & pause reads + header parse) **+ ≈2.48M per feed** (parser compute).
 - **End-to-end:** the same per-feed slope; the oracle adds only a small fixed overhead
   (decoder-authorization + staleness + fee), and no write.
@@ -66,9 +68,9 @@ per-feed worst case; sparser feeds cost less.
 
 | dimension | share of block |
 |---|--:|
-| **runtime** | **0.8376%** |
-| read_count | 0.1867% |
-| read_length | 0.0559% |
+| **runtime** | **0.8374%** |
+| read_count | 0.1267% |
+| read_length | 0.0470% |
 | write_count | 0.0000% |
 | write_length | 0.0000% |
 
@@ -78,17 +80,19 @@ Runtime is the binding dimension: ~119 such 16-feed verifies would fill a block'
 
 - **Runtime dominates; there is no storage I/O.** Verify-only performs zero writes, so the
   write dimensions are flat zero. Parsing is pure buffer compute — feed count drives runtime
-  but not read_count/read_length (those stay flat regardless of feed count: the governance
-  reads plus contract code).
+  but not read_count/read_length (those stay flat regardless of feed count: the oracle reads
+  plus contract code).
+- **Merging governance into the oracle trimmed the read dimensions.** The oracle's
+  decoder-authorization / staleness / fee reads are now intra-contract `var-get`s rather than
+  cross-contract calls, dropping the end-to-end path from 28→19 reads with runtime unchanged.
 - **`get` on the threaded parse state is the per-feed cost lever.** The fold accumulator
   carries the payload `(buff 8192)`, and every `(get field state)` costs ~proportional to the
-  *whole* tuple's size, no matter the field's own type. The parser binds each state field
-  once per iteration; the residual per-feed cost is byte reads + sign-extension + merges,
-  irreducible for a safe per-feed parser.
-- **The pause kill-switch costs a per-call governance read.** Enforcing pause in the
-  decoder's `verify-update` adds a second cross-contract read to governance on every verify —
-  a small fixed overhead, the price of pause covering both the oracle path and direct decoder
-  calls.
+  *whole* tuple's size. The parser binds each state field once per iteration; the residual
+  per-feed cost is byte reads + sign-extension + merges, irreducible for a safe parser.
+- **The pause kill-switch still costs a per-call read.** The decoder is a separate contract,
+  so its `verify-update` pause check + trusted-signer read are cross-contract reads into the
+  oracle on every verify — a small fixed overhead, the price of pause covering both the oracle
+  path and direct decoder calls.
 
 ## Conclusion
 

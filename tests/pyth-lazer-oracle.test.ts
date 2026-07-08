@@ -13,8 +13,8 @@ const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!; // holds both roles + is the default fee recipient
 const wallet1 = accounts.get("wallet_1")!; // a relayer/consumer (holds no roles)
 
-const ORACLE = "pyth-lazer-oracle-v1";
-const GOV = "pyth-lazer-governance";
+const ORACLE = "pyth-lazer-oracle";
+const GOV = "pyth-lazer-oracle";
 const DECODER_NAME = "pyth-lazer-decoder-v1";
 
 const FAR_FUTURE = 100_000_000_000n;

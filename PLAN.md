@@ -13,8 +13,11 @@
 > `read-price-with-staleness-check`, `authorized-writer`, and the monotonic replay guard
 > are gone. `pause` is now enforced in the decoder (halting both the oracle and direct
 > decoder paths), and `set-trusted-signers` is exempt from the pause gate so a compromised
-> key can be rotated while paused. **The detailed sections below still describe the earlier
-> storage-based design and are pending revision if this direction is adopted.**
+> key can be rotated while paused. It also **merges governance into the oracle**:
+> `pyth-lazer-governance` + `pyth-lazer-oracle-v1` become one immutable `pyth-lazer-oracle`
+> (roles/pause/config + the verify entry), leaving `pyth-lazer-decoder-v1` as the sole
+> swappable contract. **The detailed sections below still describe the earlier storage-based
+> design and are pending revision if this direction is adopted.**
 
 ---
 

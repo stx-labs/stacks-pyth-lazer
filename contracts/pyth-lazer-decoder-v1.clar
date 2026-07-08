@@ -118,7 +118,7 @@
     ;; Break-glass kill-switch: halt verification while governance has paused the protocol.
     ;; Gating here (the trusted-signer boundary) covers BOTH the oracle path and direct
     ;; consumer calls to decode-and-verify-price-feeds.
-    (try! (contract-call? .pyth-lazer-governance assert-active))
+    (try! (contract-call? .pyth-lazer-oracle assert-active))
     (let ((recovered (try! (recover-signer update))))
       (asserts! (is-signer-trusted (get signer recovered)) ERR_UNTRUSTED_SIGNER)
       (ok recovered)
@@ -490,7 +490,7 @@
 (define-private (is-signer-trusted (signer (buff 33)))
   (get trusted
     (fold check-trusted-signer
-      (contract-call? .pyth-lazer-governance get-trusted-signers) {
+      (contract-call? .pyth-lazer-oracle get-trusted-signers) {
       target: signer,
       now: stacks-block-time,
       trusted: false,

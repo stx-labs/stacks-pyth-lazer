@@ -6,7 +6,7 @@ const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
 
 const DECODER = "pyth-lazer-decoder-v1";
-const GOV = "pyth-lazer-governance";
+const GOV = "pyth-lazer-oracle";
 
 const FAR_FUTURE = 100_000_000_000n;
 const TS = 1_700_000_000_000_000n; // microseconds

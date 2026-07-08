@@ -1,11 +1,17 @@
-;; Title: pyth-lazer-governance
+;; Title: pyth-lazer-oracle
 ;; Version: FINAL (immutable)
 ;;
-;; Description: Config state and access control for Pyth protocol
+;; Description: The Pyth Lazer core contract -- immutable protocol state, access control,
+;; and the public price-verification entry point (`verify-price-feeds`).
 ;;
-;; Uses role-based access controls (similar to stx-labs/usdcx-token)
-;;   - `governance`: Manages fee/stale threshold/admins/etc.
-;;   - `pause`: Pause/resume protocol and governance
+;; Verify-only: `verify-price-feeds` dispatches to the governance-blessed (swappable)
+;; decoder, enforces the staleness window + fee, and returns the parsed feeds. No price
+;; storage. Consumers may also call `pyth-lazer-decoder-v1.decode-and-verify-price-feeds`
+;; directly (free read-only).
+;;
+;; Role-based access control (similar to stx-labs/usdcx-token):
+;;   - `governance`: manage signers / fee / decoder / stale-threshold / roles
+;;   - `pause`: pause/resume price verification
 
 ;; Imported so set-decoder takes a <decoder-trait>, rejecting a non-decoder at the type level.
 (use-trait decoder-trait .pyth-lazer-traits.decoder-trait)
@@ -18,6 +24,13 @@
 (define-constant ERR_PAUSED (err u4004))
 ;; Cannot change your own governance role
 (define-constant ERR_CANNOT_CHANGE_OWN_GOVERNANCE (err u4005))
+;; Passed decoder is not the governance-authorized one
+(define-constant ERR_INVALID_DECODER (err u1001))
+;; Update's publish-time is older than the staleness window
+(define-constant ERR_STALE_PRICE (err u1002))
+
+;; Lazer publish-time is microseconds; the staleness window is seconds
+(define-constant MICROS_PER_SECOND u1000000)
 
 ;; Role IDs: Single-byte buffers (not bitflags)
 (define-constant ROLE_GOVERNANCE 0x00) ;; manage signers/fee/decoder/threshold/writer + roles
@@ -281,5 +294,45 @@
       data: { caller: contract-caller },
     })
     (ok true)
+  )
+)
+
+;;;; Price verification (public entry)
+
+;; Verify a Lazer update via the governance-blessed decoder and return the parsed feeds.
+;; Public (dispatches to the decoder through a trait and may charge a fee). Reverts if
+;; paused (enforced in the decoder), the signature/signer is invalid, the decoder isn't
+;; the authorized one, or the update is stale.
+(define-public (verify-price-feeds
+    (update (buff 8192))
+    (decoder-contract <decoder-trait>)
+  )
+  (begin
+    ;; Only the governance-authorized decoder is accepted
+    (asserts! (is-eq (contract-of decoder-contract) (var-get decoder)) ERR_INVALID_DECODER)
+    (let (
+        ;; Decode + verify: signature, trusted signer, and the pause kill-switch are all
+        ;; enforced inside the decoder.
+        (decoded (try! (contract-call? decoder-contract decode-and-verify-price-feeds update)))
+        (publish-time-seconds (/ (get timestamp decoded) MICROS_PER_SECOND))
+        (threshold (var-get stale-price-threshold))
+      )
+      ;; Reject stale updates. Written additively (publish + threshold >= now) so a Lazer
+      ;; publish-time running ahead of the current block time can't underflow the uint.
+      (asserts! (>= (+ publish-time-seconds threshold) stacks-block-time) ERR_STALE_PRICE)
+      (try! (charge-fee))
+      (ok decoded)
+    )
+  )
+)
+
+;; Charge the per-update fee (default u0) from tx-sender to the fee recipient.
+;; `stx-transfer?` rejects a zero amount, so guard on it.
+(define-private (charge-fee)
+  (let ((fee-amount (var-get fee)))
+    (if (> fee-amount u0)
+      (stx-transfer? fee-amount tx-sender (var-get fee-recipient))
+      (ok true)
+    )
   )
 )

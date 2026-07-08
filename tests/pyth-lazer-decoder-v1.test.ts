@@ -6,7 +6,7 @@ const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
 
 const DECODER = "pyth-lazer-decoder-v1";
-const GOV = "pyth-lazer-governance";
+const GOV = "pyth-lazer-oracle";
 
 // Error codes (PLAN 3.2 / decoder constants)
 const ERR_INPUT_TOO_SHORT = 2101;

@@ -16,11 +16,10 @@ The oracle verifies it through the decoder — signer recovery, trusted-signer c
 | Contract | Mutability | Role |
 |---|---|---|
 | `pyth-lazer-traits` | immutable | Trait definitions |
+| `pyth-lazer-oracle` | immutable | Core contract: roles (governance/pause), trusted signers, fee, stale threshold, and the `verify-price-feeds` entry |
 | `pyth-lazer-decoder-v1` | **swappable** | Verify signature + parse message; returns the feeds (directly callable, read-only) |
-| `pyth-lazer-oracle-v1` | thin / stable | Verify-only entry: validates the blessed decoder, enforces staleness + fee, returns the feeds |
-| `pyth-lazer-governance` | immutable | Roles (governance/pause), trusted signers, fee, stale threshold |
 
-Verify-only: the oracle holds no state and stores no prices — consumers read a price by submitting a fresh signed update (via the oracle, or the decoder directly) and using the returned feeds in-transaction. Only the decoder and oracle carry a `-vN` suffix and are swappable; the substrate (`-traits`, `-governance`) is unversioned so its addresses never move. See [`PLAN.md`](./PLAN.md).
+Verify-only: no prices are stored on-chain — consumers get a price by submitting a fresh signed update (via `pyth-lazer-oracle`, or the decoder directly) and using the returned feeds in-transaction. Only the **decoder** carries a `-vN` suffix and is swappable (governance-blessed); the core (`pyth-lazer-traits`, `pyth-lazer-oracle`) is immutable so its addresses never move. See [`PLAN.md`](./PLAN.md).
 
 ## Clarity version
 

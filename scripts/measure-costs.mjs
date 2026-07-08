@@ -13,8 +13,8 @@ import { PROD_SIGNER, hexToBytes } from "./lib/lazer.mjs";
 
 const FAR_FUTURE = 100_000_000_000n;
 const DECODER = "pyth-lazer-decoder-v1";
-const ORACLE = "pyth-lazer-oracle-v1";
-const GOV = "pyth-lazer-governance";
+const ORACLE = "pyth-lazer-oracle";
+const GOV = "pyth-lazer-oracle";
 
 const simnet = await initSimnet("Clarinet.toml", false, { trackCosts: true });
 const accounts = simnet.getAccounts();

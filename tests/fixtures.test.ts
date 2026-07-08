@@ -28,7 +28,7 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!; // governance admin
 
-const GOV = "pyth-lazer-governance";
+const GOV = "pyth-lazer-oracle";
 const DECODER = "pyth-lazer-decoder-v1";
 
 const FAR_FUTURE = 100_000_000_000n;
