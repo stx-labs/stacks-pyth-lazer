@@ -4,7 +4,7 @@
 ;; Description: The Pyth Lazer core contract -- immutable protocol state, access control,
 ;; and the public price-verification entry point (`verify-price-feeds`).
 ;;
-;; Verify-only: `verify-price-feeds` verifies a signed update through the governance-blessed
+;; Verify-only: `verify-price-feeds` verifies a signed update through the authorized
 ;; (swappable) decoder and returns the parsed feeds for in-transaction use. Consumers may
 ;; instead call the decoder's `decode-and-verify-price-feeds` directly (free read-only).
 ;;
@@ -23,7 +23,7 @@
 (define-constant ERR_PAUSED (err u4004))
 ;; Cannot change your own governance role
 (define-constant ERR_CANNOT_CHANGE_OWN_GOVERNANCE (err u4005))
-;; Passed decoder is not the governance-authorized one
+;; Passed decoder is not the authorized one
 (define-constant ERR_INVALID_DECODER (err u1001))
 ;; Update's publish-time is older than the staleness window
 (define-constant ERR_STALE_PRICE (err u1002))
@@ -59,9 +59,8 @@
 } true
 )
 
-;; If true, price verification is halted -- enforced in the decoder's `verify-update`, so
-;; both the oracle path and direct decoder calls stop. `set-trusted-signers` stays callable
-;; while paused (see below) so a compromised key can be rotated mid-incident; others are gated.
+;; Pauses protocol and most governance functions
+;; `set-trusted-signers` stays callable so a compromised key can be rotated mid-incident
 (define-data-var paused bool false)
 
 ;; Trusted Lazer signers
@@ -75,9 +74,9 @@
 ;; Time before prices go stale, in seconds
 (define-data-var stale-price-threshold uint (if is-in-mainnet
   u7200 ;;  2 hours
-  u157680000
+  u157680000 ;; ~5 years
 ))
-;; ~5 years
+
 
 ;; The only decoder principal accepted for `<decoder>` trait param
 (define-data-var decoder principal .pyth-lazer-decoder-v1)
@@ -297,14 +296,14 @@
 
 ;;;; Price verification (public entry)
 
-;; Verify a Lazer update through the governance-blessed decoder and return the parsed feeds.
+;; Verify a Lazer update through the authorized decoder and return the parsed feeds.
 ;; Public (not read-only) because it dispatches via a trait and may charge a fee.
 (define-public (verify-price-feeds
     (update (buff 8192))
     (decoder-contract <decoder-trait>)
   )
   (begin
-    ;; Only the governance-authorized decoder is accepted
+    ;; Only the authorized decoder is accepted
     (asserts! (is-eq (contract-of decoder-contract) (var-get decoder)) ERR_INVALID_DECODER)
     (let (
         ;; signature, trusted-signer, and pause checks all run inside the decoder

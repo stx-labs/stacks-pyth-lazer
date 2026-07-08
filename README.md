@@ -19,7 +19,7 @@ The oracle verifies it through the decoder — signer recovery, trusted-signer c
 | `pyth-lazer-oracle` | immutable | Core contract: roles (governance/pause), trusted signers, fee, stale threshold, and the `verify-price-feeds` entry |
 | `pyth-lazer-decoder-v1` | **swappable** | Verify signature + parse message; returns the feeds (directly callable, read-only) |
 
-Verify-only: no prices are persisted on-chain — consumers get a price by submitting a fresh signed update (via `pyth-lazer-oracle`, or the decoder directly) and using the returned feeds in-transaction. Only the **decoder** carries a `-vN` suffix and is swappable (governance-blessed); the core (`pyth-lazer-traits`, `pyth-lazer-oracle`) is immutable so its addresses never move. See [`PLAN.md`](./PLAN.md).
+Verify-only: no prices are persisted on-chain — consumers get a price by submitting a fresh signed update (via `pyth-lazer-oracle`, or the decoder directly) and using the returned feeds in-transaction. Only the **decoder** carries a `-vN` suffix and is swappable (the governance role selects the active decoder); the core (`pyth-lazer-traits`, `pyth-lazer-oracle`) is immutable so its addresses never move. See [`PLAN.md`](./PLAN.md).
 
 ## Clarity version
 

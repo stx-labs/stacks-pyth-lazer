@@ -101,8 +101,8 @@ describe("pyth-lazer-oracle: verify-price-feeds", () => {
 
   // NOTE: the blessed-decoder rejection path (a conforming but UNBLESSED decoder) isn't unit-
   // tested here -- it needs a second trait-conforming decoder we intentionally don't keep in-repo.
-  // The control is a single `(is-eq (contract-of decoder) (get-decoder))` assert, and governance's
-  // trait-typed set-decoder guarantees only a real decoder can be blessed.
+  // The control is a single `(is-eq (contract-of decoder) (get-decoder))` assert, and the
+  // trait-typed `set-decoder` guarantees only a real decoder can be blessed.
 
   it("propagates a decoder verification failure (untrusted signer)", () => {
     bootstrap();
