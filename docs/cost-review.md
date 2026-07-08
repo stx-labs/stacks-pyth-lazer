@@ -2,7 +2,7 @@
 
 Execution-cost analysis of the on-chain hot paths, measured **2026-07-07** against the
 **verify-only** `decoder-v1` + `pyth-lazer-oracle` (governance and the verify entry merged
-into one immutable contract; no storage layer): the oracle validates the blessed decoder,
+into one immutable contract): the oracle validates the blessed decoder,
 dispatches to `decode-and-verify-price-feeds`, enforces the staleness window + fee, and
 returns the parsed feeds. Nothing is written on-chain.
 
@@ -78,7 +78,7 @@ Runtime is the binding dimension: ~119 such 16-feed verifies would fill a block'
 
 ## Interpretation
 
-- **Runtime dominates; there is no storage I/O.** Verify-only performs zero writes, so the
+- **Runtime dominates; nothing is persisted.** Verify-only performs zero writes, so the
   write dimensions are flat zero. Parsing is pure buffer compute — feed count drives runtime
   but not read_count/read_length (those stay flat regardless of feed count: the oracle reads
   plus contract code).
@@ -97,7 +97,7 @@ Runtime is the binding dimension: ~119 such 16-feed verifies would fill a block'
 ## Conclusion
 
 No optimization required. A consumer can verify far more updates per block than any
-deviation/heartbeat schedule needs, and with storage removed the write dimensions are zero.
+deviation/heartbeat schedule needs, and being verify-only, the write dimensions are zero.
 A larger runtime win is theoretically available — threading a per-feed *slice* instead of
 the whole payload would make every remaining `get` cheap — but it adds offset-rebasing
 complexity for a non-binding metric, so it is intentionally not done. Re-run

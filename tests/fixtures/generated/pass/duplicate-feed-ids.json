@@ -1,5 +1,5 @@
 {
-  "description": "two feeds sharing the same feed-id in one update; the DECODER does not dedupe -- it returns both records in order. (De-duplication is a storage concern: the oracle/storage applies last-write-wins by feed-id.)",
+  "description": "two feeds sharing the same feed-id in one update; the DECODER does not dedupe -- it returns both records in order. De-duplication, if any, is left to the consumer.",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [

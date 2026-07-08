@@ -3,13 +3,13 @@
 Clarity 5 contracts that bring **Pyth Lazer** ("Pyth Pro") signed price feeds to Stacks.
 Successor to [`stacks-pyth-bridge`](../stacks-pyth-bridge) (Pythnet + Wormhole, deprecated) — simpler: no Wormhole, no Merkle proofs.
 
-> **Status:** Phases 1–4 complete (signatures, payload parsing, storage, oracle + governance);
+> **Status:** Phases 1–4 complete (signatures, payload parsing, oracle + governance);
 > Phase 5 (hardening) underway; deployment (6) remains. Full design: [`PLAN.md`](./PLAN.md).
 
 ## How it works
 
 A consumer (or relayer) supplies a signed Lazer update in the **`evm`** format (one secp256k1 signature over `keccak256(payload)`).
-The oracle verifies it through the decoder — signer recovery, trusted-signer check, feed parsing — and **returns** the parsed feeds for use in the same transaction. Nothing is stored on-chain: this is a verify-only oracle, matching Pyth's Lazer contracts on other chains.
+The oracle verifies it through the decoder — signer recovery, trusted-signer check, feed parsing — and **returns** the parsed feeds for use in the same transaction. Nothing is persisted on-chain: this is a verify-only oracle, matching Pyth's Lazer contracts on other chains.
 
 ## Contracts
 
@@ -19,7 +19,7 @@ The oracle verifies it through the decoder — signer recovery, trusted-signer c
 | `pyth-lazer-oracle` | immutable | Core contract: roles (governance/pause), trusted signers, fee, stale threshold, and the `verify-price-feeds` entry |
 | `pyth-lazer-decoder-v1` | **swappable** | Verify signature + parse message; returns the feeds (directly callable, read-only) |
 
-Verify-only: no prices are stored on-chain — consumers get a price by submitting a fresh signed update (via `pyth-lazer-oracle`, or the decoder directly) and using the returned feeds in-transaction. Only the **decoder** carries a `-vN` suffix and is swappable (governance-blessed); the core (`pyth-lazer-traits`, `pyth-lazer-oracle`) is immutable so its addresses never move. See [`PLAN.md`](./PLAN.md).
+Verify-only: no prices are persisted on-chain — consumers get a price by submitting a fresh signed update (via `pyth-lazer-oracle`, or the decoder directly) and using the returned feeds in-transaction. Only the **decoder** carries a `-vN` suffix and is swappable (governance-blessed); the core (`pyth-lazer-traits`, `pyth-lazer-oracle`) is immutable so its addresses never move. See [`PLAN.md`](./PLAN.md).
 
 ## Clarity version
 

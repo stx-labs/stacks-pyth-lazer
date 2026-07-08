@@ -55,7 +55,7 @@ function measure(label, res) {
 // full decode-and-verify (signature + trust + parse)
 measure(`decode-and-verify (${nF3} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f3)], deployer));
 measure(`decode-and-verify (${nF16} feeds)`, simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [updBuf(f16)], deployer));
-// end-to-end oracle verify (verify + parse + fee path; verify-only, no storage write)
+// end-to-end oracle verify (verify + parse + fee path; verify-only, no writes)
 measure(`verify-price-feeds END-TO-END (${nF3} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f3), decoderRef], relayer));
 measure(`verify-price-feeds END-TO-END (${nF16} feeds)`, simnet.callPublicFn(ORACLE, "verify-price-feeds", [updBuf(f16), decoderRef], relayer));
 

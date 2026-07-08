@@ -115,9 +115,8 @@
 ;; Recover signer and check against trusted signers
 (define-read-only (verify-update (update (buff 8192)))
   (begin
-    ;; Break-glass kill-switch: halt verification while governance has paused the protocol.
-    ;; Gating here (the trusted-signer boundary) covers BOTH the oracle path and direct
-    ;; consumer calls to decode-and-verify-price-feeds.
+    ;; Break-glass kill-switch: halt verification while paused. Gating here (the trusted-signer
+    ;; boundary) covers both the oracle path and direct decode-and-verify-price-feeds calls.
     (try! (contract-call? .pyth-lazer-oracle assert-active))
     (let ((recovered (try! (recover-signer update))))
       (asserts! (is-signer-trusted (get signer recovered)) ERR_UNTRUSTED_SIGNER)
