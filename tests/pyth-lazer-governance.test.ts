@@ -141,6 +141,15 @@ describe("pyth-lazer-governance: pause", () => {
     expect(setFee(5n, deployer).result).toBeOk(Cl.bool(true));
   });
 
+  it("exempts set-trusted-signers from the pause gate (rotate a compromised key while paused)", () => {
+    expect(simnet.callPublicFn(GOV, "pause", [], deployer).result).toBeOk(Cl.bool(true));
+    // A compromised signer must be revocable during an incident, so set-trusted-signers is the
+    // one config change allowed while paused (unlike set-fee, which stays blocked above).
+    expect(
+      simnet.callPublicFn(GOV, "set-trusted-signers", [Cl.list([signerEntry(100n)])], deployer).result,
+    ).toBeOk(Cl.bool(true));
+  });
+
   it("keeps pause distinct from governance (a pause-only holder cannot configure)", () => {
     setRole(wallet1, ROLE_PAUSE, true); // wallet1 gets pause only
     expect(simnet.callPublicFn(GOV, "pause", [], wallet1).result).toBeOk(Cl.bool(true));

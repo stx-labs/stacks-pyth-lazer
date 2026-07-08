@@ -47,7 +47,10 @@
 } true
 )
 
-;; If true, all governance and state-modifying protocol activity is disabled
+;; If true, price verification is halted: the decoder's `verify-update` rejects with
+;; ERR_PAUSED, so neither the oracle path nor direct decoder calls return verified prices.
+;; `set-trusted-signers` is intentionally exempt (see below) so a compromised key can be
+;; rotated during an incident; the other governance setters remain gated while paused.
 (define-data-var paused bool false)
 
 ;; Trusted Lazer signers
@@ -140,7 +143,8 @@
   expires-at: uint,
 })))
   (begin
-    (try! (assert-active))
+    ;; Intentionally NOT gated by `assert-active`: a compromised signer must be revocable
+    ;; WHILE paused (pause halts verification; rotating the trusted set is the incident fix).
     (try! (assert-governance contract-caller))
     (var-set trusted-signers signers)
     (print {

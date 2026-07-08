@@ -1,29 +1,38 @@
 ;; Title: pyth-lazer-oracle
 ;; Version: v1
 ;;
-;; Description: Entry point for submitting Pyth price feeds. Called by relayer
+;; Description: Verification entry point for Pyth Lazer price feeds. Called by consumers/relayers.
 ;;
-;; Hardcodes storage and governance, but takes the <decoder> as a trait param and checks it
-;; against governance's authorized decoder
+;; Verify-only: no on-chain price storage. Takes the <decoder> as a trait param, checks it
+;; against governance's authorized decoder, dispatches to it, enforces the staleness window
+;; and per-update fee, and RETURNS the parsed feeds for in-transaction use. Consumers who don't
+;; need the fee / staleness / decoder-authorization guarantees can instead call
+;; `pyth-lazer-decoder-v1.decode-and-verify-price-feeds` directly (a free read-only call).
 
 (use-trait decoder-trait .pyth-lazer-traits.decoder-trait)
 
 ;;;; Constants
 
-;; Passed decoder is not the authorized one
+;; Passed decoder is not the governance-authorized one
 (define-constant ERR_INVALID_DECODER (err u1001))
+;; Update's publish-time is older than governance's staleness window
+(define-constant ERR_STALE_PRICE (err u1002))
+
+;; Lazer publish-time is microseconds; the staleness window is seconds
+(define-constant MICROS_PER_SECOND u1000000)
 
 ;;;; Public functions
 
-;; Entrypoint for submitting price feeds. Called by relayer
-(define-public (verify-and-update-price-feeds
+;; Verify a Lazer update via the governance-blessed decoder and return the parsed feeds.
+;; Public (not read-only) because it dispatches to the decoder through a trait and may
+;; charge a fee. Reverts if paused (enforced in the decoder), the signature/signer is
+;; invalid, the decoder isn't the authorized one, or the update is stale.
+(define-public (verify-price-feeds
     (update (buff 8192))
     (decoder <decoder-trait>)
   )
   (begin
-    ;; Reject while paused
-    (try! (contract-call? .pyth-lazer-governance assert-active))
-    ;; Only authorized decoder is allowed
+    ;; Only the governance-authorized decoder is accepted
     (asserts!
       (is-eq (contract-of decoder)
         (contract-call? .pyth-lazer-governance get-decoder)
@@ -31,101 +40,25 @@
       ERR_INVALID_DECODER
     )
     (let (
+        ;; Decode + verify: signature, trusted signer, and the pause kill-switch are all
+        ;; enforced inside the decoder.
         (decoded (try! (contract-call? decoder decode-and-verify-price-feeds update)))
-        ;; Transform Pyth message format -> storage format
-        (records (get records
-          (fold add-record (get price-feeds decoded) {
-            publish-time: (get timestamp decoded),
-            channel: (get channel decoded),
-            records: (list),
-          })
-        ))
-        (written (try! (contract-call? .pyth-lazer-storage write records)))
+        (publish-time-seconds (/ (get timestamp decoded) MICROS_PER_SECOND))
+        (threshold (contract-call? .pyth-lazer-governance get-stale-price-threshold))
       )
+      ;; Reject stale updates. Written additively (publish + threshold >= now) so a Lazer
+      ;; publish-time running ahead of the current block time can't underflow the uint.
+      (asserts! (>= (+ publish-time-seconds threshold) stacks-block-time) ERR_STALE_PRICE)
       (try! (charge-fee))
-      (ok written)
+      (ok decoded)
     )
   )
 )
 
 ;;;; Private functions
 
-;; Transform Pyth message format -> storage format
-;; Extract `feed-id` from record, add `publish-time` and `channel`
-(define-private (add-record
-    (feed {
-      feed-id: uint,
-      price: int,
-      exponent: int,
-      publisher-count: uint,
-      confidence: (optional uint),
-      best-bid: (optional int),
-      best-ask: (optional int),
-      funding-rate: (optional int),
-      funding-timestamp: (optional uint),
-      funding-rate-interval: (optional uint),
-      market-session: (optional uint),
-      ema-price: (optional int),
-      ema-confidence: (optional uint),
-      feed-update-timestamp: (optional uint),
-    })
-    (acc {
-      publish-time: uint,
-      channel: uint,
-      records: (list 16
-        {
-          feed-id: uint,
-          record: {
-            price: int,
-            exponent: int,
-            publisher-count: uint,
-            confidence: (optional uint),
-            best-bid: (optional int),
-            best-ask: (optional int),
-            funding-rate: (optional int),
-            funding-timestamp: (optional uint),
-            funding-rate-interval: (optional uint),
-            market-session: (optional uint),
-            ema-price: (optional int),
-            ema-confidence: (optional uint),
-            feed-update-timestamp: (optional uint),
-            publish-time: uint,
-            channel: uint,
-          },
-        }
-      ),
-    })
-  )
-  (merge acc {
-    ;; #[allow(panic)]
-    records: (unwrap-panic (as-max-len?
-      (append (get records acc) {
-        feed-id: (get feed-id feed),
-        record: {
-          price: (get price feed),
-          exponent: (get exponent feed),
-          publisher-count: (get publisher-count feed),
-          confidence: (get confidence feed),
-          best-bid: (get best-bid feed),
-          best-ask: (get best-ask feed),
-          funding-rate: (get funding-rate feed),
-          funding-timestamp: (get funding-timestamp feed),
-          funding-rate-interval: (get funding-rate-interval feed),
-          market-session: (get market-session feed),
-          ema-price: (get ema-price feed),
-          ema-confidence: (get ema-confidence feed),
-          feed-update-timestamp: (get feed-update-timestamp feed),
-          publish-time: (get publish-time acc),
-          channel: (get channel acc),
-        },
-      })
-      u16
-    )),
-    ;; NOTE: `as-max-len?` needs a LITERAL bound, not a constant
-  })
-)
-
-;; Charge fee to `tx-sender` for submitting price feeds
+;; Charge the per-update fee (default u0) from tx-sender to governance's fee recipient.
+;; `stx-transfer?` rejects a zero amount, so guard on it.
 (define-private (charge-fee)
   (let ((fee (contract-call? .pyth-lazer-governance get-fee)))
     (if (> fee u0)

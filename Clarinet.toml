@@ -28,11 +28,6 @@ path = "contracts/pyth-lazer-traits.clar"
 clarity_version = 5
 epoch = "latest"
 
-[contracts.pyth-lazer-storage]
-path = "contracts/pyth-lazer-storage.clar"
-clarity_version = 5
-epoch = "latest"
-
 [contracts.pyth-lazer-governance]
 path = "contracts/pyth-lazer-governance.clar"
 clarity_version = 5
