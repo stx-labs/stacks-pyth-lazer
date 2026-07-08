@@ -31,7 +31,7 @@ const setRole = (
 const setFee = (amount: bigint, sender = deployer) =>
   simnet.callPublicFn(GOV, "set-fee", [Cl.uint(amount)], sender);
 
-describe("pyth-lazer-governance: roles", () => {
+describe("pyth-lazer-oracle: roles", () => {
   it("grants the deployer both roles at deploy, and no one else any", () => {
     expect(hasRole(deployer, ROLE_GOVERNANCE)).toBeBool(true);
     expect(hasRole(deployer, ROLE_PAUSE)).toBeBool(true);
@@ -100,7 +100,7 @@ describe("pyth-lazer-governance: roles", () => {
   });
 });
 
-describe("pyth-lazer-governance: pause", () => {
+describe("pyth-lazer-oracle: pause", () => {
   it("starts unpaused", () => {
     expect(simnet.callReadOnlyFn(GOV, "is-paused", [], deployer).result).toBeBool(false);
   });
@@ -160,7 +160,7 @@ describe("pyth-lazer-governance: pause", () => {
   });
 });
 
-describe("pyth-lazer-governance: trusted-signer slice", () => {
+describe("pyth-lazer-oracle: trusted-signer slice", () => {
   it("starts with an empty trusted-signer set", () => {
     expect(simnet.callReadOnlyFn(GOV, "get-trusted-signers", [], deployer).result).toBeList([]);
   });
@@ -177,7 +177,7 @@ describe("pyth-lazer-governance: trusted-signer slice", () => {
   });
 });
 
-describe("pyth-lazer-governance: stale-price threshold", () => {
+describe("pyth-lazer-oracle: stale-price threshold", () => {
   // simnet is not mainnet, so the default is the ~5-year window (seconds).
   const DEFAULT_THRESHOLD = 5n * 365n * 24n * 60n * 60n;
 
@@ -195,7 +195,7 @@ describe("pyth-lazer-governance: stale-price threshold", () => {
   });
 });
 
-describe("pyth-lazer-governance: blessed decoder", () => {
+describe("pyth-lazer-oracle: blessed decoder", () => {
   it("defaults to the v1 decoder", () => {
     expect(simnet.callReadOnlyFn(GOV, "get-decoder", [], deployer).result)
       .toBePrincipal(`${deployer}.pyth-lazer-decoder-v1`);
@@ -216,7 +216,7 @@ describe("pyth-lazer-governance: blessed decoder", () => {
   });
 });
 
-describe("pyth-lazer-governance: fee + fee recipient", () => {
+describe("pyth-lazer-oracle: fee + fee recipient", () => {
   it("defaults the fee to u0 and the recipient to the deployer", () => {
     expect(simnet.callReadOnlyFn(GOV, "get-fee", [], deployer).result).toBeUint(0n);
     expect(simnet.callReadOnlyFn(GOV, "get-fee-recipient", [], deployer).result).toBePrincipal(deployer);

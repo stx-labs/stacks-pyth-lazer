@@ -83,7 +83,7 @@ const expectedDecoded = (feeds: ClarityValue[], timestamp = TS, channel = REAL_T
     "price-feeds": Cl.list(feeds),
   });
 
-describe("pyth-lazer-oracle-v1: verify-price-feeds", () => {
+describe("pyth-lazer-oracle: verify-price-feeds", () => {
   it("verifies and returns a single decoded feed", () => {
     bootstrap();
     expect(verify(makeUpdate([feed(1, 4_200_000_000n, -8n, 1_500_000n, 18n)])).result)
