@@ -99,10 +99,11 @@ describe("pyth-lazer-oracle: verify-price-feeds", () => {
       ]));
   });
 
-  // NOTE: the blessed-decoder rejection path (a conforming but UNBLESSED decoder) isn't unit-
-  // tested here -- it needs a second trait-conforming decoder we intentionally don't keep in-repo.
-  // The control is a single `(is-eq (contract-of decoder) (get-decoder))` assert, and the
-  // trait-typed `set-decoder` guarantees only a real decoder can be blessed.
+  // NOTE: the blessed-decoder rejection path (a conforming but UNBLESSED decoder) and the
+  // set-decoder swap seam aren't unit-tested here -- exercising them needs a second trait-
+  // conforming decoder, and we intentionally keep only one decoder contract in the repo. The
+  // control is a single `(is-eq (contract-of decoder) (get-decoder))` assert, and the trait-typed
+  // `set-decoder` guarantees only a real decoder can be blessed.
 
   it("propagates a decoder verification failure (untrusted signer)", () => {
     bootstrap();
@@ -173,5 +174,20 @@ describe("pyth-lazer-oracle: verify-price-feeds", () => {
     const res = verify(makeUpdate([feed(1, 1n, 0n, 1n, 5n)]), wallet1);
     expect(res.result).toBeOk(expectedDecoded([expectedFeed(1, 1n, 0n, 1n, 5n)]));
     expect(res.events.find((e) => e.event === "stx_transfer_event")).toBeUndefined();
+  });
+
+  it("routes the fee to a configured (non-default) recipient", () => {
+    bootstrap();
+    simnet.callPublicFn(GOV, "set-fee", [Cl.uint(500n)], deployer);
+    simnet.callPublicFn(GOV, "set-fee-recipient", [Cl.principal(wallet1)], deployer);
+
+    // deployer pays; the configured recipient (wallet1, not the default) receives
+    const res = verify(makeUpdate([feed(1, 1n, 0n, 1n, 5n)]), deployer);
+    expect(res.result).toBeOk(expectedDecoded([expectedFeed(1, 1n, 0n, 1n, 5n)]));
+
+    const transfer = res.events.find((e) => e.event === "stx_transfer_event");
+    expect(transfer!.data.amount).toBe("500");
+    expect(transfer!.data.sender).toBe(deployer);
+    expect(transfer!.data.recipient).toBe(wallet1);
   });
 });
