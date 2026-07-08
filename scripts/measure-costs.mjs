@@ -40,9 +40,8 @@ const nF3 = f3.parsed.priceFeeds.length;
 const nF16 = f16.parsed.priceFeeds.length;
 
 const updBuf = (f) => Cl.buffer(hexToBytes(f.evmHex));
-// decode-and-verify-price-feeds is read-only (relayers reach it through the oracle),
-// but the SDK meters read-only calls too, so we measure it directly for the decode
-// linear model. verify-price-feeds is the public end-to-end verify-and-return entry.
+// verify-price-feeds is the sole verification entry (the decoder gates verify-update to the
+// oracle). Two feed counts give the linear (fixed + per-feed) runtime model.
 
 const measurements = [];
 function measure(label, res) {

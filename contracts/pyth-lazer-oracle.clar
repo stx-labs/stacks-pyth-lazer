@@ -32,7 +32,7 @@
 (define-constant MICROS_PER_SECOND u1000000)
 
 ;; Role IDs: Single-byte buffers (not bitflags)
-(define-constant ROLE_GOVERNANCE 0x00) ;; manage signers/fee/decoder/threshold/writer + roles
+(define-constant ROLE_GOVERNANCE 0x00) ;; manage signers/fee/decoder/threshold + roles
 (define-constant ROLE_PAUSE 0x01) ;; pause / unpause
 
 ;;;; Data vars / maps
@@ -82,7 +82,7 @@
 (define-data-var decoder principal .pyth-lazer-decoder-v1)
 
 ;; Per-update fee in microSTX
-;; Paid by relayer, sent to `fee-recipient`
+;; Paid by the caller (tx-sender) of verify-price-feeds, sent to `fee-recipient`
 (define-data-var fee uint u0)
 
 ;; Where the oracle sends collected fees
