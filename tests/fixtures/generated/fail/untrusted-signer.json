@@ -1,5 +1,5 @@
 {
-  "description": "a structurally valid update signed by a key that is NOT in the governance trusted-signer set; signature recovers fine but the trust check rejects it",
+  "description": "a structurally valid update signed by a key that is NOT in the trusted-signer set; signature recovers fine but the trust check rejects it",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [

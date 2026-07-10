@@ -10,8 +10,7 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 //
 //   fixtures/captured/<timestampUs>.json   REAL Lazer `evm` updates from the API
 //       { channel, timestampUs, parsed, evmHex } -- evmHex (signed ground truth)
-//       must decode to `parsed` (Pyth's own SDK decode). Replayed in publish-time
-//       order to exercise storage's monotonic guard.
+//       must decode to `parsed` (Pyth's own SDK decode).
 //
 //   fixtures/generated/pass/<name>.json    synthetic specs that MUST decode
 //   fixtures/generated/fail/<name>.json    synthetic specs that MUST be rejected
@@ -28,16 +27,14 @@ import { buildEvmUpdate, buildLazerPayload, OTHER_PRIVKEY, PROP, TEST_PUBKEY, ty
 
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!; // governance admin
-const relayer = accounts.get("wallet_1")!; // submission is permissionless
 
-const ORACLE = "pyth-lazer-oracle-v1";
-const GOV = "pyth-lazer-governance";
-const STORAGE = "pyth-lazer-storage";
+const ORACLE = "pyth-lazer-oracle";
+const GOV = "pyth-lazer-oracle";
 const DECODER = "pyth-lazer-decoder-v1";
+const decoderRef = Cl.contractPrincipal(deployer, DECODER);
 
 const FAR_FUTURE = 100_000_000_000n;
 const PROD_SIGNER = "03a4380f01136eb2640f90c17e1e319e02bbafbeef2e6e67dc48af53f9827e155b";
-const decoderRef = Cl.contractPrincipal(deployer, DECODER);
 
 type Fixture = { name: string; data: any };
 
@@ -73,14 +70,14 @@ function trustAll() {
     ])],
     deployer,
   );
+  // widen the staleness window so the fixed-timestamp fixtures stay fresh through the oracle
+  simnet.callPublicFn(ORACLE, "set-stale-price-threshold", [Cl.uint(100_000_000_000_000n)], deployer);
 }
 
+// Verify through the oracle (the sole entry; the decoder rejects direct callers).
+// max-age none -> uses the (widened) governance default set in trustAll.
 const decode = (update: Uint8Array) =>
-  simnet.callReadOnlyFn(DECODER, "decode-and-verify-price-feeds", [Cl.buffer(update)], deployer).result;
-const submit = (update: Uint8Array) =>
-  simnet.callPublicFn(ORACLE, "verify-and-update-price-feeds", [Cl.buffer(update), decoderRef], relayer).result;
-const getPrice = (feedId: number) =>
-  simnet.callReadOnlyFn(STORAGE, "get-price", [Cl.uint(feedId)], deployer).result;
+  simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef, Cl.none()], deployer).result;
 
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
@@ -131,26 +128,6 @@ const capturedDecode = (c: any) =>
     timestamp: Cl.uint(BigInt(c.parsed.timestampUs)),
     channel: Cl.uint(c.channel),
     "price-feeds": Cl.list(c.parsed.priceFeeds.filter(hasRequired).map(capturedFeed)),
-  });
-
-// The stored record = decoder output + oracle-supplied publish-time/channel.
-const capturedStored = (f: any, c: any) =>
-  Cl.tuple({
-    price: Cl.int(BigInt(f.price)),
-    exponent: Cl.int(BigInt(f.exponent)),
-    "publisher-count": Cl.uint(BigInt(f.publisherCount)),
-    confidence: optUint(big(f.confidence)),
-    "best-bid": optInt(big(f.bestBidPrice)),
-    "best-ask": optInt(big(f.bestAskPrice)),
-    "funding-rate": optInt(big(f.fundingRate)),
-    "funding-timestamp": optUint(big(f.fundingTimestamp)),
-    "funding-rate-interval": optUint(big(f.fundingRateInterval)),
-    "market-session": sessionOpt(f.marketSession),
-    "ema-price": nonzeroIntOpt(f.emaPrice),
-    "ema-confidence": nonzeroUintOpt(f.emaConfidence),
-    "feed-update-timestamp": optUint(big(f.feedUpdateTimestamp)),
-    "publish-time": Cl.uint(BigInt(c.timestampUs)),
-    channel: Cl.uint(c.channel),
   });
 
 // === generated: build a payload from the spec, then sign with the TEST key ===
@@ -211,7 +188,7 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
   return update;
 }
 
-// PROP name -> decoder output field, kind, and how a spec value maps to the stored option:
+// PROP name -> decoder output field, kind, and how a spec value maps to the output option:
 //   sentinel  -- a 0 value decodes to none (protocol "missing" marker; applies to price, publisher-count, confidence, best-bid/ask, ema-*)
 //   literal   -- kept as-is, 0 included (exponent, market-session)
 //   existence -- existence-flagged (6/7/8/12): `null` -> none, any bigint -> some (present 0 kept)
@@ -288,40 +265,6 @@ describe("fixtures: captured real Lazer updates", () => {
   it.each(captured)("decode-and-verify matches the SDK parse: $name", ({ data }) => {
     trustAll();
     expect(decode(hexToBytes(data.evmHex))).toBeOk(capturedDecode(data));
-  });
-
-  it("replays captured updates in publish-time order: latest wins, older/equal skipped", () => {
-    if (captured.length < 2) return; // nothing to sequence
-    trustAll();
-    const seq = captured
-      .map((c) => c.data)
-      .sort((a, b) => (BigInt(a.timestampUs) < BigInt(b.timestampUs) ? -1 : 1));
-
-    // Model the per-feed monotonic guard to predict each submit's write count and
-    // the final winner per feed -- works for any set (mixed feeds, gaps, dups).
-    // The decoder drops a feed missing any required field (price, exponent,
-    // publisher-count), so it never reaches storage -- it neither counts as a write
-    // nor lands in storage. Mirror that here (the screened fixtures include feeds
-    // without confidence / best-bid / best-ask).
-    const winner = new Map<number, { f: any; c: any }>();
-    for (const c of seq) {
-      let writes = 0;
-      for (const f of c.parsed.priceFeeds) {
-        if (!hasRequired(f)) continue;
-        const w = winner.get(f.priceFeedId);
-        if (!w || BigInt(c.timestampUs) > BigInt(w.c.timestampUs)) {
-          winner.set(f.priceFeedId, { f, c });
-          writes++;
-        }
-      }
-      expect(submit(hexToBytes(c.evmHex))).toBeOk(Cl.uint(writes));
-    }
-
-    for (const [id, w] of winner) expect(getPrice(id)).toBeOk(capturedStored(w.f, w.c));
-
-    // Re-submitting the earliest update is fully skipped (every feed is already
-    // stored at a >= publish-time), leaving the count at zero.
-    expect(submit(hexToBytes(seq[0].evmHex))).toBeOk(Cl.uint(0));
   });
 });
 

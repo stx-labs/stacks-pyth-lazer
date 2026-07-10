@@ -6,13 +6,16 @@ const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
 
 const DECODER = "pyth-lazer-decoder-v1";
-const GOV = "pyth-lazer-governance";
+const ORACLE = "pyth-lazer-oracle";
+const GOV = "pyth-lazer-oracle";
+const decoderRef = Cl.contractPrincipal(deployer, DECODER);
 
 // Error codes (PLAN 3.2 / decoder constants)
 const ERR_INPUT_TOO_SHORT = 2101;
 const ERR_INVALID_EVM_MAGIC = 2102;
 const ERR_OVERLAY_PRESENT = 2103;
 const ERR_UNTRUSTED_SIGNER = 2105;
+const ERR_UNAUTHORIZED_CALLER = 2106;
 
 // Far-future expiry (unix seconds, ~year 5138) so the signer is never expired.
 const FAR_FUTURE = 100_000_000_000n;
@@ -72,41 +75,38 @@ describe("pyth-lazer-decoder-v1: recover-signer (signature + envelope)", () => {
   });
 });
 
-describe("pyth-lazer-decoder-v1: verify-update (trusted-signer check)", () => {
-  it("accepts an update from a trusted, non-expired signer", () => {
-    trust(TEST_PUBKEY, FAR_FUTURE);
+describe("pyth-lazer-decoder-v1: verify-update (trusted-signer check, via the oracle)", () => {
+  // verify-update is callable only by the oracle now; the reject cases fail at the signer
+  // check before payload parsing, so a throwaway payload is fine. The trusted-accept path is
+  // exercised end-to-end in the oracle + golden-fixture suites.
+  const verify = (update: Uint8Array) =>
+    simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef, Cl.none()], deployer).result;
+
+  it("rejects a direct (non-oracle) caller", () => {
+    trust(TEST_PUBKEY, FAR_FUTURE); // even a trusted signer can't reach it directly
     const update = buildEvmUpdate(samplePayload);
     const { result } = simnet.callReadOnlyFn(DECODER, "verify-update", [Cl.buffer(update)], deployer);
-    expect(result).toBeOk(
-      Cl.tuple({ signer: Cl.buffer(TEST_PUBKEY), payload: Cl.buffer(samplePayload) }),
-    );
+    expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED_CALLER));
   });
 
   it("rejects when no trusted signers are configured", () => {
-    const update = buildEvmUpdate(samplePayload);
-    const { result } = simnet.callReadOnlyFn(DECODER, "verify-update", [Cl.buffer(update)], deployer);
-    expect(result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
+    expect(verify(buildEvmUpdate(samplePayload))).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 
   it("rejects an update signed by an untrusted key", () => {
     trust(OTHER_PUBKEY, FAR_FUTURE);
-    const update = buildEvmUpdate(samplePayload); // signed by TEST_PRIVKEY
-    const { result } = simnet.callReadOnlyFn(DECODER, "verify-update", [Cl.buffer(update)], deployer);
-    expect(result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
+    expect(verify(buildEvmUpdate(samplePayload))).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER)); // signed by TEST_PRIVKEY
   });
 
   it("rejects a trusted signer whose key has expired", () => {
     trust(TEST_PUBKEY, 1n); // expires-at = 1 (long past)
-    const update = buildEvmUpdate(samplePayload);
-    const { result } = simnet.callReadOnlyFn(DECODER, "verify-update", [Cl.buffer(update)], deployer);
-    expect(result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
+    expect(verify(buildEvmUpdate(samplePayload))).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 
   it("rejects a tampered payload (recovered key is not the trusted signer)", () => {
     trust(TEST_PUBKEY, FAR_FUTURE);
     const update = buildEvmUpdate(samplePayload);
     update[update.length - 1] ^= 0xff; // flip a payload byte without re-signing
-    const { result } = simnet.callReadOnlyFn(DECODER, "verify-update", [Cl.buffer(update)], deployer);
-    expect(result).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
+    expect(verify(update)).toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 });

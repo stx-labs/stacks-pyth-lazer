@@ -66,6 +66,7 @@
 (define-constant ERR_OVERLAY_PRESENT (err u2103))
 (define-constant ERR_INVALID_SIGNATURE (err u2104))
 (define-constant ERR_UNTRUSTED_SIGNER (err u2105))
+(define-constant ERR_UNAUTHORIZED_CALLER (err u2106)) ;; verify-update is callable only by pyth-lazer-oracle
 
 ;; Errors: Lazer payload / feeds (Phase 2)
 (define-constant ERR_INVALID_PAYLOAD_MAGIC (err u2201))
@@ -114,9 +115,15 @@
 
 ;; Recover signer and check against trusted signers
 (define-read-only (verify-update (update (buff 8192)))
-  (let ((recovered (try! (recover-signer update))))
-    (asserts! (is-signer-trusted (get signer recovered)) ERR_UNTRUSTED_SIGNER)
-    (ok recovered)
+  (begin
+    ;; Must use this contract with Pyth Oracle
+    (asserts! (is-eq contract-caller .pyth-lazer-oracle) ERR_UNAUTHORIZED_CALLER)
+    ;; Check if protocol paused
+    (try! (contract-call? .pyth-lazer-oracle assert-active))
+    (let ((recovered (try! (recover-signer update))))
+      (asserts! (is-signer-trusted (get signer recovered)) ERR_UNTRUSTED_SIGNER)
+      (ok recovered)
+    )
   )
 )
 
@@ -484,7 +491,7 @@
 (define-private (is-signer-trusted (signer (buff 33)))
   (get trusted
     (fold check-trusted-signer
-      (contract-call? .pyth-lazer-governance get-trusted-signers) {
+      (contract-call? .pyth-lazer-oracle get-trusted-signers) {
       target: signer,
       now: stacks-block-time,
       trusted: false,

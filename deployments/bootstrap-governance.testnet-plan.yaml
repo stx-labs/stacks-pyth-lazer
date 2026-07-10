@@ -9,14 +9,14 @@ plan:
   - id: 0
     transactions:
     - transaction-type: contract-call
-      contract-id: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6.pyth-lazer-governance
+      contract-id: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6.pyth-lazer-oracle
       expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
       method: set-stale-price-threshold
       parameters:
       - "u7200"
       cost: 50000
     - transaction-type: contract-call
-      contract-id: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6.pyth-lazer-governance
+      contract-id: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6.pyth-lazer-oracle
       expected-sender: ST3J7AB3XMNZJAYGWEKD9H0XZX1A5567177HY3AC6
       method: set-trusted-signers
       parameters:
