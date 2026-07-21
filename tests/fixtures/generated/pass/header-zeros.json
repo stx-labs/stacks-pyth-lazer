@@ -1,8 +1,0 @@
-{
-  "description": "payload header at zero: timestamp 0 and channel 0; both are recorded as-is",
-  "channel": 0,
-  "timestampUs": "0",
-  "feeds": [
-    { "id": 41, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
-  ]
-}

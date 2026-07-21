@@ -1,0 +1,9 @@
+{
+  "description": "payload header carries channel 0, the protocol's Invalid sentinel; the decoder rejects it fail-closed",
+  "channel": 0,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 41, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ],
+  "expectErr": 2208
+}

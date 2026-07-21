@@ -305,7 +305,7 @@ name and `;; Version:` carries the number.)
 | 4 | Feed properties persisted in v1 | Decoder persists minimal (`price`, `exponent`, `confidence`, publish/feed time); storage *schema* reserves the full set as optionals (§6.4) | ✅ Decided |
 | 5 | Consumer migration | Coexist with the old bridge; no `buff 32` adapter; document the new read API | ✅ Decided |
 | 6 | Fee model | Keep the configurable per-update STX fee mechanism, default `u0` | ✅ Decided |
-| 7 | Channel policy | Record/emit the channel; accept any value (no allowlist in v1) — §6.3 | ✅ Decided |
+| 7 | Channel policy | Record/emit the channel; accept any value except the 0=Invalid sentinel (no full allowlist in v1) — §6.3 | ✅ Decided |
 | 8 | Upgradeability model | Only the decoder is swappable; storage + governance immutable; oracle thin, hardcodes them — §6.4 | ✅ Decided |
 | 9 | Contract split | Keep all five contracts separate (no folding); storage is the read anchor — §6.4 | ✅ Decided |
 
@@ -323,9 +323,11 @@ real 32-byte hash with no integer meaning — not the case here.)
 
 Lazer "channels" are publish-cadence tiers (`RealTime`, `FixedRate50/200/1000` ms). The
 payload header carries a `channel` byte, and the signature covers it, so it is trustworthy
-metadata — not a security control. v1 **records/emits the channel and accepts any value**;
-staleness already governs freshness. A governance-set channel allowlist can be added later if a
-consumer needs a guaranteed cadence.
+metadata — not a security control. v1 **records/emits the channel and accepts any value except
+the `0=Invalid` sentinel** (which the protocol itself defines as "not a real channel", so it is
+rejected fail-closed); staleness already governs freshness. Higher unknown values (`5+`) stay
+accepted so a future Lazer cadence tier does not require a decoder redeploy. A governance-set
+channel allowlist can be added later if a consumer needs a guaranteed cadence.
 
 ### 6.4 Upgradeability & contract split (decisions #8 / #9)
 

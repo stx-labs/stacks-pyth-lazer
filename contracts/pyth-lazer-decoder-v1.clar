@@ -76,6 +76,7 @@
 (define-constant ERR_UNKNOWN_PROPERTY (err u2205)) ;; Property type the v1 decoder does not handle
 (define-constant ERR_TOO_MANY_PROPS (err u2206)) ;; Feed declares more properties than exist
 (define-constant ERR_INVALID_MARKET_SESSION (err u2207)) ;; market-session value outside 0-4
+(define-constant ERR_INVALID_CHANNEL (err u2208)) ;; channel is the 0=Invalid sentinel
 
 ;;;; Read-only functions
 
@@ -155,6 +156,9 @@
           ERR_INVALID_FEED_DATA
         ))
       )
+      ;; Reject only the 0=Invalid sentinel; higher unknown values stay accepted so a
+      ;; future Lazer cadence tier does not require a decoder redeploy to keep parsing.
+      (asserts! (not (is-eq channel u0)) ERR_INVALID_CHANNEL)
       (asserts! (<= feeds-len MAX_FEEDS) ERR_TOO_MANY_FEEDS)
       (let ((state (try! (fold parse-feed-slot FEED_SLOTS
           (ok {

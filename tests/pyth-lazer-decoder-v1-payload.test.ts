@@ -22,6 +22,7 @@ const ERR_PAYLOAD_OVERLAY = 2204;
 const ERR_UNKNOWN_PROPERTY = 2205;
 const ERR_TOO_MANY_PROPS = 2206;
 const ERR_INVALID_MARKET_SESSION = 2207;
+const ERR_INVALID_CHANNEL = 2208;
 
 function trust() {
   simnet.callPublicFn(
@@ -255,6 +256,24 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
       ],
     });
     expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(5, 7n, -1n, 4n)]));
+  });
+
+  it("rejects the channel=0 Invalid sentinel", () => {
+    trust();
+    const payload = buildLazerPayload({ timestamp: TS, channel: 0, feeds: [{ id: 1, props: [[PROP.Price, 1n]] }] });
+    expect(decode(payload)).toBeErr(Cl.uint(ERR_INVALID_CHANNEL));
+  });
+
+  it("accepts an unknown non-zero channel (reserved for a future cadence tier)", () => {
+    trust();
+    // 5 is not a defined tier today; forward-compat means parse it rather than reject.
+    // Pairs with the channel=0 reject test: only the Invalid sentinel is gated.
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: 5,
+      feeds: [{ id: 1, props: [[PROP.Price, 7n], [PROP.Exponent, -1n], [PROP.PublisherCount, 4n]] }],
+    });
+    expect(decode(payload)).toBeOk(decoded(5, [feedRecord(1, 7n, -1n, 4n)]));
   });
 
   it("rejects a wrong payload magic", () => {

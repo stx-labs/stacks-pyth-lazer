@@ -1,0 +1,8 @@
+{
+  "description": "timestamp 0 at the payload header is recorded as-is (a valid zero, not a sentinel); channel is a valid tier",
+  "channel": 1,
+  "timestampUs": "0",
+  "feeds": [
+    { "id": 41, "props": [["Price", "1000"], ["Exponent", "-8"], ["PublisherCount", "5"]] }
+  ]
+}
