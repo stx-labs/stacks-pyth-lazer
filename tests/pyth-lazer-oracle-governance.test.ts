@@ -175,6 +175,13 @@ describe("pyth-lazer-oracle: trusted-signer slice", () => {
     const { result } = simnet.callPublicFn(GOV, "set-trusted-signers", [Cl.list([signerEntry(100n)])], wallet1);
     expect(result).toBeErr(Cl.uint(ERR_UNAUTHORIZED));
   });
+
+  it("accepts a full set of 100 trusted signers (EVM-parity capacity)", () => {
+    // Distinct expires-at values just to keep the entries unique; capacity is the point.
+    const signers = Array.from({ length: 100 }, (_, i) => signerEntry(BigInt(i + 1)));
+    expect(simnet.callPublicFn(GOV, "set-trusted-signers", [Cl.list(signers)], deployer).result).toBeOk(Cl.bool(true));
+    expect(simnet.callReadOnlyFn(GOV, "get-trusted-signers", [], deployer).result).toBeList(signers);
+  });
 });
 
 describe("pyth-lazer-oracle: stale-price threshold", () => {
