@@ -1,5 +1,5 @@
 {
-  "description": "33 feeds declared, one over MAX_FEEDS (32); rejected at the header before any feed is parsed",
+  "description": "76 feeds declared, one over MAX_FEEDS (75); rejected at the header before any feed is parsed",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [
@@ -293,6 +293,393 @@
     },
     {
       "id": 332,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 333,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 334,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 335,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 336,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 337,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 338,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 339,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 340,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 341,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 342,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 343,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 344,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 345,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 346,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 347,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 348,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 349,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 350,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 351,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 352,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 353,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 354,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 355,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 356,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 357,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 358,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 359,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 360,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 361,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 362,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 363,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 364,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 365,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 366,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 367,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 368,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 369,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 370,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 371,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 372,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 373,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 374,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 375,
       "props": [
         [
           "Price",

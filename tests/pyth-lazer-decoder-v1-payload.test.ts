@@ -85,6 +85,55 @@ const feedRecord = (
 const decoded = (channel: number, feeds: ReturnType<typeof feedRecord>[]) =>
   Cl.tuple({ timestamp: Cl.uint(TS), channel: Cl.uint(channel), "price-feeds": Cl.list(feeds) });
 
+// A fully-populated feed (all 13 properties present) for index i. Values are nonzero wherever
+// the decoder collapses 0 -> none, so the decoded record mirrors the input. Each such feed
+// encodes to the max 108 bytes (4 id + 1 count + 103 property bytes) -- the worst case for sizing.
+const fullFeedValues = (i: number) => ({
+  price: BigInt(1_000_000 + i),
+  bid: BigInt(999_000 + i),
+  ask: BigInt(1_001_000 + i),
+  pub: BigInt(1 + i), // nonzero uint16
+  expo: -8n,
+  conf: BigInt(500 + i),
+  fr: BigInt(-(i + 1)), // funding rate: negative + present (existence-flagged)
+  ft: BigInt(1_700_000_000_000_000 + i),
+  fri: BigInt(3_600 + i),
+  ms: BigInt(i % 5), // market session 0-4
+  ema: BigInt(1_000_000 + i),
+  emaConf: BigInt(500 + i),
+  fut: BigInt(1_700_000_000_000_000 + i),
+});
+
+const fullFeedSpec = (i: number): FeedSpec => {
+  const v = fullFeedValues(i);
+  return {
+    id: 1000 + i,
+    props: [
+      [PROP.Price, v.price],
+      [PROP.BestBidPrice, v.bid],
+      [PROP.BestAskPrice, v.ask],
+      [PROP.PublisherCount, v.pub],
+      [PROP.Exponent, v.expo],
+      [PROP.Confidence, v.conf],
+      [PROP.FundingRate, v.fr],
+      [PROP.FundingTimestamp, v.ft],
+      [PROP.FundingRateInterval, v.fri],
+      [PROP.MarketSession, v.ms],
+      [PROP.EmaPrice, v.ema],
+      [PROP.EmaConfidence, v.emaConf],
+      [PROP.FeedUpdateTimestamp, v.fut],
+    ],
+  };
+};
+
+const fullFeedRecord = (i: number) => {
+  const v = fullFeedValues(i);
+  return feedRecord(1000 + i, v.price, v.expo, v.pub, v.conf, {
+    bid: v.bid, ask: v.ask, ms: v.ms, ema: v.ema, emaConf: v.emaConf,
+    fr: v.fr, ft: v.ft, fri: v.fri, fut: v.fut,
+  });
+};
+
 describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)", () => {
   it("decodes a single feed with price / exponent / confidence / publisher-count", () => {
     trust();
@@ -264,10 +313,20 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     expect(decode(payload)).toBeErr(Cl.uint(ERR_INVALID_PAYLOAD_MAGIC));
   });
 
-  it("rejects more feeds than MAX_FEEDS (32)", () => {
+  it("decodes the maximum 75 fully-populated feeds (buffer upper bound)", () => {
+    trust();
+    const feeds = Array.from({ length: 75 }, (_, i) => fullFeedSpec(i));
+    const payload = buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds });
+    // 75 * 108-byte feeds + 14-byte payload header + 71-byte envelope = 8185, just within (buff 8192)
+    expect(buildEvmUpdate(payload).length).toBe(8185);
+    const expected = feeds.map((_, i) => fullFeedRecord(i));
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, expected));
+  });
+
+  it("rejects more feeds than MAX_FEEDS (75)", () => {
     trust();
     const feeds: FeedSpec[] = [];
-    for (let i = 0; i < 33; i++) feeds.push({ id: i, props: [[PROP.Price, BigInt(i + 1)]] });
+    for (let i = 0; i < 76; i++) feeds.push({ id: i, props: [[PROP.Price, BigInt(i + 1)]] });
     const payload = buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds });
     expect(decode(payload)).toBeErr(Cl.uint(ERR_TOO_MANY_FEEDS));
   });

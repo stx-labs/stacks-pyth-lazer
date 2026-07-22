@@ -11,7 +11,7 @@
       response       {
       timestamp: uint,
       channel: uint,
-      price-feeds: (list 32
+      price-feeds: (list 75
         {
           ;; Full Lazer property set
           feed-id: uint,
