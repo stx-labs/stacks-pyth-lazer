@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Cl } from "@stacks/transactions";
-import { buildEvmUpdate, TEST_PUBKEY, OTHER_PUBKEY } from "./helpers";
+import { buildEvmUpdate, buildEvmUpdateHighS, TEST_PUBKEY, OTHER_PUBKEY } from "./helpers";
 
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
@@ -14,8 +14,10 @@ const decoderRef = Cl.contractPrincipal(deployer, DECODER);
 const ERR_INPUT_TOO_SHORT = 2101;
 const ERR_INVALID_EVM_MAGIC = 2102;
 const ERR_OVERLAY_PRESENT = 2103;
+const ERR_INVALID_SIGNATURE = 2104;
 const ERR_UNTRUSTED_SIGNER = 2105;
 const ERR_UNAUTHORIZED_CALLER = 2106;
+const ERR_HIGH_S_SIGNATURE = 2107;
 
 // Far-future expiry (unix seconds, ~year 5138) so the signer is never expired.
 const FAR_FUTURE = 100_000_000_000n;
@@ -38,6 +40,15 @@ describe("pyth-lazer-decoder-v1: recover-signer (signature + envelope)", () => {
     expect(result).toBeOk(
       Cl.tuple({ signer: Cl.buffer(TEST_PUBKEY), payload: Cl.buffer(samplePayload) }),
     );
+  });
+
+  // Skipped: the clarinet-sdk WASM VM does not yet enforce low-S in secp256k1-verify (native
+  // testnet/mainnet nodes do). Remove .skip once clarinet-sdk picks up Stacks Core PR #7305.
+  it.skip("rejects a high-S (malleable) signature, distinct from an invalid one", () => {
+    const update = buildEvmUpdateHighS(samplePayload);
+    const { result } = simnet.callReadOnlyFn(DECODER, "recover-signer", [Cl.buffer(update)], deployer);
+    expect(result).toBeErr(Cl.uint(ERR_HIGH_S_SIGNATURE));
+    expect(ERR_HIGH_S_SIGNATURE).not.toBe(ERR_INVALID_SIGNATURE);
   });
 
   it("rejects a wrong magic prefix", () => {

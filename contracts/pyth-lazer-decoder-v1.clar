@@ -67,6 +67,7 @@
 (define-constant ERR_INVALID_SIGNATURE (err u2104))
 (define-constant ERR_UNTRUSTED_SIGNER (err u2105))
 (define-constant ERR_UNAUTHORIZED_CALLER (err u2106)) ;; verify-update is callable only by pyth-lazer-oracle
+(define-constant ERR_HIGH_S_SIGNATURE (err u2107)) ;; non-canonical high-S signature (malleable)
 
 ;; Errors: Lazer payload / feeds (Phase 2)
 (define-constant ERR_INVALID_PAYLOAD_MAGIC (err u2201))
@@ -101,9 +102,12 @@
       ;; Reject trailing bytes past the signed payload
       (asserts! (is-eq update-len payload-end) ERR_OVERLAY_PRESENT)
       ;; keccak256(payload) is the signed message hash
-      (let ((signer (unwrap! (secp256k1-recover? (keccak256 payload) signature)
-          ERR_INVALID_SIGNATURE
-        )))
+      (let (
+          (hash (keccak256 payload))
+          (signer (unwrap! (secp256k1-recover? hash signature) ERR_INVALID_SIGNATURE))
+        )
+        ;; secp256k1-verify rejects high-S (malleable) signatures; secp256k1-recover? does not
+        (asserts! (secp256k1-verify hash signature signer) ERR_HIGH_S_SIGNATURE)
         (ok {
           signer: signer,
           payload: payload,

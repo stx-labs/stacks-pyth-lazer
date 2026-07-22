@@ -38,6 +38,26 @@ export function buildEvmUpdate(
   return concatBytes(EVM_FORMAT_MAGIC, rs, v, len, payload);
 }
 
+const SECP256K1_N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+
+/**
+ * Build an `evm`-format update signed with the malleable high-S twin (s' = n - s, recovery bit
+ * flipped). Still a valid signature that recovers the same signer, but non-canonical — a
+ * low-S-enforcing verifier must reject it.
+ */
+export function buildEvmUpdateHighS(
+  payload: Uint8Array,
+  privKey: Uint8Array = TEST_PRIVKEY,
+): Uint8Array {
+  const hash = keccak_256(payload);
+  const sig = secp256k1.sign(hash, privKey); // canonical low-S, recovery set
+  const highS = SECP256K1_N - sig.s; // upper-half twin
+  const rs = concatBytes(uBE(sig.r, 32), uBE(highS, 32)); // r || s'
+  const v = Uint8Array.from([sig.recovery ^ 1]); // flip recovery so recover? still yields the signer
+  const len = Uint8Array.from([(payload.length >> 8) & 0xff, payload.length & 0xff]);
+  return concatBytes(EVM_FORMAT_MAGIC, rs, v, len, payload);
+}
+
 // ---------------------------------------------------------------------------
 // Lazer payload encoder (PLAN 3.3-3.4). Big-endian, matching the on-chain parser.
 //
