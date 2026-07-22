@@ -264,10 +264,10 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     expect(decode(payload)).toBeErr(Cl.uint(ERR_INVALID_PAYLOAD_MAGIC));
   });
 
-  it("rejects more feeds than MAX_FEEDS (16)", () => {
+  it("rejects more feeds than MAX_FEEDS (32)", () => {
     trust();
     const feeds: FeedSpec[] = [];
-    for (let i = 0; i < 17; i++) feeds.push({ id: i, props: [[PROP.Price, BigInt(i)]] });
+    for (let i = 0; i < 33; i++) feeds.push({ id: i, props: [[PROP.Price, BigInt(i + 1)]] });
     const payload = buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds });
     expect(decode(payload)).toBeErr(Cl.uint(ERR_TOO_MANY_FEEDS));
   });

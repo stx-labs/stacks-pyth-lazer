@@ -1,5 +1,5 @@
 {
-  "description": "17 feeds declared, one over MAX_FEEDS (16); rejected at the header before any feed is parsed",
+  "description": "33 feeds declared, one over MAX_FEEDS (32); rejected at the header before any feed is parsed",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [
@@ -149,6 +149,150 @@
     },
     {
       "id": 316,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 317,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 318,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 319,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 320,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 321,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 322,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 323,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 324,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 325,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 326,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 327,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 328,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 329,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 330,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 331,
+      "props": [
+        [
+          "Price",
+          "1"
+        ]
+      ]
+    },
+    {
+      "id": 332,
       "props": [
         [
           "Price",
