@@ -64,7 +64,10 @@
 (define-data-var paused bool false)
 
 ;; Trusted Lazer signers
-(define-data-var trusted-signers (list 16
+;; Capacity matches the EVM reference (`PythLazer.sol`, 100), the sibling verifier for the
+;; same secp256k1 scheme. Fold cost scales with signers actually set (1-2 in practice), not
+;; this bound, so the headroom is free.
+(define-data-var trusted-signers (list 100
   {
     pubkey: (buff 33), ;; Compressed secp256k1 pubkey
     expires-at: uint, ;; Unix timestamp (seconds)
@@ -76,7 +79,6 @@
   u7200 ;;  2 hours
   u157680000 ;; ~5 years
 ))
-
 
 ;; The only decoder principal accepted for `<decoder>` trait param
 (define-data-var decoder principal .pyth-lazer-decoder-v1)
@@ -148,7 +150,7 @@
 ;;
 ;; Only available to callers with `ROLE_GOVERNANCE`
 
-(define-public (set-trusted-signers (signers (list 16 {
+(define-public (set-trusted-signers (signers (list 100 {
   pubkey: (buff 33),
   expires-at: uint,
 })))
@@ -306,7 +308,9 @@
   )
   (begin
     ;; Only the authorized decoder is accepted
-    (asserts! (is-eq (contract-of decoder-contract) (var-get decoder)) ERR_INVALID_DECODER)
+    (asserts! (is-eq (contract-of decoder-contract) (var-get decoder))
+      ERR_INVALID_DECODER
+    )
     (let (
         ;; signature, trusted-signer, and pause checks all run inside the decoder
         (decoded (try! (contract-call? decoder-contract decode-and-verify-price-feeds update)))
@@ -315,7 +319,9 @@
       )
       ;; Reject stale updates. Written additively (publish + threshold >= now) so a Lazer
       ;; publish-time running ahead of the current block time can't underflow the uint.
-      (asserts! (>= (+ publish-time-seconds threshold) stacks-block-time) ERR_STALE_PRICE)
+      (asserts! (>= (+ publish-time-seconds threshold) stacks-block-time)
+        ERR_STALE_PRICE
+      )
       (try! (charge-fee))
       (ok decoded)
     )
