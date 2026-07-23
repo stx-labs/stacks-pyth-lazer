@@ -329,11 +329,15 @@
 )
 
 ;; Charge the per-update fee (default u0) from tx-sender to the fee recipient.
-;; `stx-transfer?` rejects a zero amount, so guard on it.
+;; `stx-transfer?` rejects a zero amount (err u3) and a self-transfer (err u2),
+;; so check for both
 (define-private (charge-fee)
-  (let ((fee-amount (var-get fee)))
-    (if (> fee-amount u0)
-      (stx-transfer? fee-amount tx-sender (var-get fee-recipient))
+  (let (
+      (fee-amount (var-get fee))
+      (recipient (var-get fee-recipient))
+    )
+    (if (and (> fee-amount u0) (not (is-eq tx-sender recipient)))
+      (stx-transfer? fee-amount tx-sender recipient)
       (ok true)
     )
   )

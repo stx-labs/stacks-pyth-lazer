@@ -190,4 +190,16 @@ describe("pyth-lazer-oracle: verify-price-feeds", () => {
     expect(transfer!.data.sender).toBe(deployer);
     expect(transfer!.data.recipient).toBe(wallet1);
   });
+
+  it("lets the fee recipient use the oracle fee-free (no self-transfer)", () => {
+    bootstrap();
+    simnet.callPublicFn(GOV, "set-fee", [Cl.uint(1000n)], deployer);
+    simnet.callPublicFn(GOV, "set-fee-recipient", [Cl.principal(wallet1)], deployer);
+
+    // wallet1 is both caller and recipient: `stx-transfer?` would fail self-transfer
+    // with (err u2), so charge-fee must skip it rather than lock the recipient out.
+    const res = verify(makeUpdate([feed(1, 1n, 0n, 1n, 5n)]), wallet1);
+    expect(res.result).toBeOk(expectedDecoded([expectedFeed(1, 1n, 0n, 1n, 5n)]));
+    expect(res.events.find((e) => e.event === "stx_transfer_event")).toBeUndefined();
+  });
 });
