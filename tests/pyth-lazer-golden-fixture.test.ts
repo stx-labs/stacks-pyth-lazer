@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Cl } from "@stacks/transactions";
 import { hexToBytes } from "@noble/hashes/utils";
+import { readFileSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // REAL Pyth Lazer `evm` golden fixtures -- the byte-order / endianness anchors.
@@ -120,6 +121,46 @@ const PROD_DECODE = Cl.tuple({
   ]),
 });
 
+// === PRODUCTION 75-feed vector (live API capture at MAX_FEEDS) ==============
+// A real fixed_rate@1000ms update carrying 75 crypto feeds -- the raised MAX_FEEDS, on
+// production bytes. Expected values are derived from Pyth's own parsed output, mirroring the
+// decoder (required price/exponent/publisher-count; 0 -> none for price/bid/ask/conf/pub),
+// so the assertion stays correct if the fixture is re-captured. Captured via
+// scripts/capture-max-feeds.mjs.
+const MAXFEEDS = JSON.parse(readFileSync("tests/fixtures/captured/1784755513000000.json", "utf8"));
+const MAXFEEDS_UPDATE = hexToBytes(MAXFEEDS.evmHex.replace(/^0x/, ""));
+
+const bi = (v: string | number | null | undefined) => (v == null ? null : BigInt(v));
+const nz = (v: bigint | null) => (v === null || v === 0n ? null : v); // decoder's some-if-nonzero
+
+type ParsedFeed = {
+  priceFeedId: number;
+  price?: string | null;
+  bestBidPrice?: string | null;
+  bestAskPrice?: string | null;
+  publisherCount?: number | null;
+  exponent?: number | null;
+  confidence?: number | null;
+};
+
+const expectedFeeds = (feeds: ParsedFeed[]) => {
+  const out: ReturnType<typeof feedRecord>[] = [];
+  for (const f of feeds) {
+    const price = nz(bi(f.price)); // required + 0-collapse: feed dropped if 0/absent
+    const pub = nz(bi(f.publisherCount)); // required + 0-collapse
+    const expo = bi(f.exponent); // required, 0 kept
+    if (price === null || pub === null || expo === null) continue;
+    out.push(feedRecord(f.priceFeedId, price, expo, nz(bi(f.confidence)), pub, nz(bi(f.bestBidPrice)), nz(bi(f.bestAskPrice))));
+  }
+  return out;
+};
+
+const MAXFEEDS_DECODE = Cl.tuple({
+  timestamp: Cl.uint(BigInt(MAXFEEDS.timestampUs)),
+  channel: Cl.uint(MAXFEEDS.channel),
+  "price-feeds": Cl.list(expectedFeeds(MAXFEEDS.parsed.priceFeeds)),
+});
+
 describe("pyth-lazer-decoder-v1: REAL Lazer evm golden fixtures (byte-order anchor)", () => {
   it("STAGING: decode-lazer-payload matches Pyth's own decoded values (big-endian)", () => {
     const { result } = simnet.callReadOnlyFn(DECODER, "decode-lazer-payload", [Cl.buffer(STAGING_PAYLOAD)], deployer);
@@ -146,6 +187,13 @@ describe("pyth-lazer-decoder-v1: REAL Lazer evm golden fixtures (byte-order anch
   it("PRODUCTION: recover-signer recovers the production signer's compressed pubkey", () => {
     const { result } = simnet.callReadOnlyFn(DECODER, "recover-signer", [Cl.buffer(PROD_UPDATE)], deployer);
     expect(result).toBeOk(Cl.tuple({ signer: Cl.buffer(hexToBytes(PROD_SIGNER)), payload: Cl.buffer(PROD_PAYLOAD) }));
+  });
+
+  it("PRODUCTION 75-feed: decode-and-verify matches the SDK decode at MAX_FEEDS (real bytes)", () => {
+    expect(MAXFEEDS.parsed.priceFeeds.length).toBe(75); // capture sits exactly at the cap
+    trust(PROD_SIGNER);
+    const { result } = simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(MAXFEEDS_UPDATE), decoderRef, Cl.none()], deployer);
+    expect(result).toBeOk(MAXFEEDS_DECODE);
   });
 
   it("rejects a real update when its signer is not trusted (the signer path is genuinely exercised)", () => {

@@ -55,9 +55,16 @@
 (define-constant PROP_EMA_CONFIDENCE u11) ;; uint64
 (define-constant PROP_FEED_UPDATE_TIMESTAMP u12) ;; uint64, existence-flagged
 
-;; Max feeds parsed per update. Must match size of `FEED_SLOTS`
-(define-constant MAX_FEEDS u16)
-(define-constant FEED_SLOTS (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15))
+;; Max feeds parsed per update. Must match size of `FEED_SLOTS`.
+;; 75 = the most fully-populated feeds (108 bytes each) that fit the 8192-byte update buffer.
+(define-constant MAX_FEEDS u75)
+(define-constant FEED_SLOTS (list
+  u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15
+  u16 u17 u18 u19 u20 u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31
+  u32 u33 u34 u35 u36 u37 u38 u39 u40 u41 u42 u43 u44 u45 u46 u47
+  u48 u49 u50 u51 u52 u53 u54 u55 u56 u57 u58 u59 u60 u61 u62 u63
+  u64 u65 u66 u67 u68 u69 u70 u71 u72 u73 u74
+))
 (define-constant PROPERTY_SLOTS (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12))
 
 ;; Errors: EVM envelope / signature (Phase 1)
@@ -156,7 +163,9 @@
         ))
       )
       (asserts! (<= feeds-len MAX_FEEDS) ERR_TOO_MANY_FEEDS)
-      (let ((state (try! (fold parse-feed-slot FEED_SLOTS
+      ;; fold has no early exit, so iterate only the feeds present (not all MAX_FEEDS slots)
+      (let ((state (try! (fold parse-feed-slot
+          (unwrap! (slice? FEED_SLOTS u0 feeds-len) ERR_INVALID_FEED_DATA)
           (ok {
             bytes: payload,
             offset: FEEDS_OFFSET,
@@ -185,7 +194,7 @@
       bytes: (buff 8192),
       offset: uint,
       remaining: uint,
-      feeds: (list 16
+      feeds: (list 75
         {
           feed-id: uint,
           price: int,
@@ -227,7 +236,7 @@
           (publisher-count (unwrap! (get publisher-count feed) (ok advanced)))
         )
         (ok (merge advanced {
-          ;; NOTE: as-max-len? needs a LITERAL bound (u16), not the MAX_FEEDS constant
+          ;; NOTE: as-max-len? needs a LITERAL bound (u75), not the MAX_FEEDS constant
           feeds: (unwrap!
             (as-max-len?
               (append (get feeds advanced)
@@ -237,7 +246,7 @@
                   publisher-count: publisher-count,
                 })
               )
-              u16
+              u75
             )
             ERR_TOO_MANY_FEEDS
           ),
@@ -256,7 +265,9 @@
   (let (
       (feed-id (unwrap! (read-uint-be? bytes offset u4) ERR_INVALID_FEED_DATA))
       (num-props (unwrap! (read-uint-be? bytes (+ offset u4) u1) ERR_INVALID_FEED_DATA))
-      (parsed (try! (fold parse-property PROPERTY_SLOTS
+      ;; Iterate only the properties present; a count past the slot list is too many
+      (prop-slots (unwrap! (slice? PROPERTY_SLOTS u0 num-props) ERR_TOO_MANY_PROPS))
+      (parsed (try! (fold parse-property prop-slots
         (ok {
           bytes: bytes,
           offset: (+ offset u5),
