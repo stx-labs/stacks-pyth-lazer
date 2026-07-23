@@ -46,8 +46,7 @@ function bootstrap() {
 const makeUpdate = (feeds: FeedSpec[], privKey?: Uint8Array, timestamp = TS) =>
   buildEvmUpdate(buildLazerPayload({ timestamp, channel: REAL_TIME, feeds }), privKey);
 
-// A complete feed: the required fields (price, exponent, publisher-count) plus confidence.
-// The decoder DROPS any feed missing a required field, so valid feeds carry a publisher-count.
+// A complete feed: price, exponent, publisher-count, and confidence all present.
 const feed = (id: number, price: bigint, exponent: bigint, confidence: bigint, pub: bigint): FeedSpec => ({
   id,
   props: [[PROP.Price, price], [PROP.Exponent, exponent], [PROP.Confidence, confidence], [PROP.PublisherCount, pub]],
@@ -56,15 +55,24 @@ const feed = (id: number, price: bigint, exponent: bigint, confidence: bigint, p
 const verify = (update: Uint8Array, sender = wallet1, maxAge: ClarityValue = Cl.none()) =>
   simnet.callPublicFn(ORACLE, "verify-price-feeds", [Cl.buffer(update), decoderRef, maxAge], sender);
 
-// Expected decoded feed: required fields + confidence present; every other optional `none`
-// (the updates these tests build carry only the base properties).
-const expectedFeed = (id: number, price: bigint, exponent: bigint, confidence: bigint, pub: bigint) =>
+const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
+const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
+
+// Expected decoded feed. Every property is optional: a value -> `some`, null -> `none`.
+// The updates these tests build carry only the base properties, so the rest are `none`.
+const expectedFeed = (
+  id: number,
+  price: bigint | null,
+  exponent: bigint | null,
+  confidence: bigint | null,
+  pub: bigint | null,
+) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
-    price: Cl.int(price),
-    exponent: Cl.int(exponent),
-    "publisher-count": Cl.uint(pub),
-    confidence: Cl.some(Cl.uint(confidence)),
+    price: optInt(price),
+    exponent: optInt(exponent),
+    "publisher-count": optUint(pub),
+    confidence: optUint(confidence),
     "best-bid": Cl.none(),
     "best-ask": Cl.none(),
     "funding-rate": Cl.none(),
@@ -111,15 +119,18 @@ describe("pyth-lazer-oracle: verify-price-feeds", () => {
       .toBeErr(Cl.uint(ERR_UNTRUSTED_SIGNER));
   });
 
-  it("drops a feed missing a required field (partial success), returning the rest", () => {
+  it("keeps a feed missing a required field, returning that field as none", () => {
     bootstrap();
     // feed 1 is complete; feed 2 has exponent + confidence + publisher-count but NO price.
     const update = makeUpdate([
       feed(1, 100n, -8n, 5n, 7n),
       { id: 2, props: [[PROP.Exponent, -8n], [PROP.Confidence, 9n], [PROP.PublisherCount, 8n]] },
     ]);
-    // the price-less feed 2 is dropped by the decoder; only feed 1 comes back.
-    expect(verify(update).result).toBeOk(expectedDecoded([expectedFeed(1, 100n, -8n, 5n, 7n)]));
+    // the price-less feed 2 is NOT dropped -- it comes back with price: none.
+    expect(verify(update).result).toBeOk(expectedDecoded([
+      expectedFeed(1, 100n, -8n, 5n, 7n),
+      expectedFeed(2, null, -8n, 9n, 8n),
+    ]));
   });
 
   it("rejects a stale update (publish-time + threshold < now)", () => {

@@ -1,5 +1,5 @@
 {
-  "description": "one update mixing feed shapes: a full feed (kept), a price-only feed (dropped: no exponent/publisher-count), an all-zero feed (dropped: price is the 0 sentinel), and a feed that LEADS with a non-price property (best-bid) before its required ones (kept). Exercises selective dropping alongside out-of-order property parsing",
+  "description": "one update mixing feed shapes: a full feed, a price-only feed (exponent/publisher-count decode to none), an all-zero feed (price 0 is the sentinel -> none, exponent 0 kept), and a feed that LEADS with a non-price property (best-bid) before the others. No feed is dropped; exercises the all-optional shape alongside out-of-order property parsing",
   "channel": 1,
   "timestampUs": "1700000000000000",
   "feeds": [

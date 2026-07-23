@@ -1,8 +1,0 @@
-{
-  "description": "a feed carrying price and exponent but no publisher-count is missing a required field, so the decoder drops it and the update decodes to an empty price-feeds list (price/exponent/publisher-count are required; feeds lacking any are not emitted)",
-  "channel": 1,
-  "timestampUs": "1700000000000000",
-  "feeds": [
-    { "id": 13, "props": [["Price", "5000"], ["Exponent", "-8"]] }
-  ]
-}

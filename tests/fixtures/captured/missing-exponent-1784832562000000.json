@@ -1,0 +1,28 @@
+{
+  "channel": 4,
+  "timestampUs": "1784832562000000",
+  "parsed": {
+    "timestampUs": "1784832562000000",
+    "priceFeeds": [
+      {
+        "priceFeedId": 1,
+        "price": "6482633970253",
+        "publisherCount": 19,
+        "confidence": 2400430483
+      },
+      {
+        "priceFeedId": 2,
+        "price": "187942573286",
+        "publisherCount": 20,
+        "confidence": 67888435
+      },
+      {
+        "priceFeedId": 6,
+        "price": "7569966732",
+        "publisherCount": 16,
+        "confidence": 1033268
+      }
+    ]
+  },
+  "evmHex": "2a22999aa8644d243d719fd4406c0176c1fe7508bfc635a5c0030ed7f63ab1854927a3ae5892418c721f9f472acacd75f93efe84b108d1359ed076dcdfa297f6ad89135401005c93c7d3750006574bb6d770800403000000010300000005e55b18524d03001305000000008f13a9930000000203000000002bc24014e60300140500000000040be53300000006030000000001c334868c0300100500000000000fc434"
+}

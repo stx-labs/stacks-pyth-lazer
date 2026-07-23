@@ -44,14 +44,15 @@ function decode(payload: Uint8Array) {
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
-// The decoded per-feed shape. price/exponent/publisher-count are required (feeds missing them
-// are dropped); every other field is `some` when present, else `none`. For the existence-flagged
-// fields (fr/ft/fri/fut) a present value passes straight through (a present 0 included).
+// The decoded per-feed shape. Every property is optional -- an absent one is `none` and no feed
+// is dropped. price/bid/ask/confidence/ema-* collapse a 0 to `none` (protocol sentinel);
+// exponent/publisher-count/market-session keep 0 literally; existence-flagged fields
+// (fr/ft/fri/fut) pass a present value straight through (a present 0 included).
 const feedRecord = (
   id: number,
-  price: bigint,
-  expo: bigint,
-  pub: bigint,
+  price: bigint | null,
+  expo: bigint | null,
+  pub: bigint | null,
   conf: bigint | null = null,
   extra: {
     bid?: bigint | null;
@@ -67,10 +68,10 @@ const feedRecord = (
 ) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
-    price: Cl.int(price),
-    exponent: Cl.int(expo),
+    price: optInt(price),
+    exponent: optInt(expo),
     confidence: optUint(conf),
-    "publisher-count": Cl.uint(pub),
+    "publisher-count": optUint(pub),
     "best-bid": optInt(extra.bid ?? null),
     "best-ask": optInt(extra.ask ?? null),
     "funding-rate": optInt(extra.fr ?? null),
@@ -293,17 +294,75 @@ describe("pyth-lazer-decoder-v1: decode-and-verify-price-feeds (payload parsing)
     expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(8, 5n, -3n, 1n)]));
   });
 
-  it("drops a feed missing a required field, keeping the complete ones", () => {
+  it("keeps a feed missing a required field, decoding that field as none", () => {
     trust();
     const payload = buildLazerPayload({
       timestamp: TS,
       channel: REAL_TIME,
       feeds: [
-        { id: 3, props: [[PROP.Price, 42n]] }, // no exponent / publisher-count -> dropped
+        { id: 3, props: [[PROP.Price, 42n]] }, // no exponent / publisher-count -> those decode to none
         { id: 5, props: [[PROP.Price, 7n], [PROP.Exponent, -1n], [PROP.PublisherCount, 4n]] },
       ],
     });
-    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(5, 7n, -1n, 4n)]));
+    // neither feed is dropped; feed 3 comes back with exponent/publisher-count none
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(3, 42n, null, null), feedRecord(5, 7n, -1n, 4n)]));
+  });
+
+  it("keeps a feed with zero properties as an all-none feed", () => {
+    trust();
+    const payload = buildLazerPayload({ timestamp: TS, channel: REAL_TIME, feeds: [{ id: 9, props: [] }] });
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(9, null, null, null)]));
+  });
+
+  it("keeps a feed missing only price (price none, others present)", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 9, props: [[PROP.Exponent, -8n], [PROP.PublisherCount, 3n], [PROP.Confidence, 5n]] }],
+    });
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(9, null, -8n, 3n, 5n)]));
+  });
+
+  it("keeps a feed missing only exponent (exponent none)", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 9, props: [[PROP.Price, 5n], [PROP.PublisherCount, 3n]] }],
+    });
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(9, 5n, null, 3n)]));
+  });
+
+  it("keeps a feed missing only publisher-count (publisher-count none)", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 9, props: [[PROP.Price, 5n], [PROP.Exponent, -8n]] }],
+    });
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(9, 5n, -8n, null)]));
+  });
+
+  it("keeps a publisher-count of 0 as some(0) -- uint16, no 0-sentinel", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 9, props: [[PROP.Price, 5n], [PROP.Exponent, -8n], [PROP.PublisherCount, 0n]] }],
+    });
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(9, 5n, -8n, 0n)]));
+  });
+
+  it("collapses a 0 price to none but still keeps the feed", () => {
+    trust();
+    const payload = buildLazerPayload({
+      timestamp: TS,
+      channel: REAL_TIME,
+      feeds: [{ id: 9, props: [[PROP.Price, 0n], [PROP.Exponent, -8n], [PROP.PublisherCount, 3n]] }],
+    });
+    // price 0 is the Option<Price> sentinel -> none; the feed is returned, not dropped
+    expect(decode(payload)).toBeOk(decoded(REAL_TIME, [feedRecord(9, null, -8n, 3n)]));
   });
 
   it("rejects a wrong payload magic", () => {

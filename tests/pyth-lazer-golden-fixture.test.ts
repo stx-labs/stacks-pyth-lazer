@@ -36,24 +36,24 @@ const ERR_UNTRUSTED_SIGNER = 2105;
 const optInt = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.int(v)));
 const optUint = (v: bigint | null) => (v === null ? Cl.none() : Cl.some(Cl.uint(v)));
 
-// Expected decoded per-feed tuple (full v1 shape). price/exponent/publisher-count are
-// required (the decoder drops feeds missing them). These real updates carry only properties
-// 0-5, so market-session / ema-* / funding-* / feed-update-timestamp are all `none`.
+// Expected decoded per-feed tuple (full v1 shape). Every property is optional; a feed is never
+// dropped for a missing one. These real updates carry only properties 0-5, so market-session /
+// ema-* / funding-* / feed-update-timestamp are all `none`.
 const feedRecord = (
   id: number,
-  price: bigint,
-  expo: bigint,
+  price: bigint | null,
+  expo: bigint | null,
   conf: bigint | null,
-  pub: bigint,
+  pub: bigint | null,
   bid: bigint | null,
   ask: bigint | null,
 ) =>
   Cl.tuple({
     "feed-id": Cl.uint(id),
-    price: Cl.int(price),
-    exponent: Cl.int(expo),
+    price: optInt(price),
+    exponent: optInt(expo),
     confidence: optUint(conf),
-    "publisher-count": Cl.uint(pub),
+    "publisher-count": optUint(pub),
     "best-bid": optInt(bid),
     "best-ask": optInt(ask),
     "funding-rate": Cl.none(),
@@ -143,17 +143,18 @@ type ParsedFeed = {
   confidence?: number | null;
 };
 
-const expectedFeeds = (feeds: ParsedFeed[]) => {
-  const out: ReturnType<typeof feedRecord>[] = [];
-  for (const f of feeds) {
-    const price = nz(bi(f.price)); // required + 0-collapse: feed dropped if 0/absent
-    const pub = nz(bi(f.publisherCount)); // required + 0-collapse
-    const expo = bi(f.exponent); // required, 0 kept
-    if (price === null || pub === null || expo === null) continue;
-    out.push(feedRecord(f.priceFeedId, price, expo, nz(bi(f.confidence)), pub, nz(bi(f.bestBidPrice)), nz(bi(f.bestAskPrice))));
-  }
-  return out;
-};
+const expectedFeeds = (feeds: ParsedFeed[]) =>
+  feeds.map((f) =>
+    feedRecord(
+      f.priceFeedId,
+      nz(bi(f.price)), // price: Option<Price>, 0/absent -> none
+      bi(f.exponent), // exponent: i16, 0 kept; absent -> none
+      nz(bi(f.confidence)),
+      bi(f.publisherCount), // publisher-count: u16, 0 kept; absent -> none
+      nz(bi(f.bestBidPrice)),
+      nz(bi(f.bestAskPrice)),
+    ),
+  );
 
 const MAXFEEDS_DECODE = Cl.tuple({
   timestamp: Cl.uint(BigInt(MAXFEEDS.timestampUs)),

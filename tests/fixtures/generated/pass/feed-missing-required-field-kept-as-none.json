@@ -1,0 +1,8 @@
+{
+  "description": "a feed carrying price and exponent but no publisher-count is missing a property, so it decodes with publisher-count: none -- feeds are never dropped, an absent property is none (matches pyth-lazer-protocol PayloadFeedData, which carries only the properties present)",
+  "channel": 1,
+  "timestampUs": "1700000000000000",
+  "feeds": [
+    { "id": 13, "props": [["Price", "5000"], ["Exponent", "-8"]] }
+  ]
+}
