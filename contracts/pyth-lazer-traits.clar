@@ -14,10 +14,11 @@
       price-feeds: (list 75
         {
           ;; Full Lazer property set
+          ;; All optional: Wire format allows any property to be absent
           feed-id: uint,
-          price: int,
-          exponent: int,
-          publisher-count: uint,
+          price: (optional int),
+          exponent: (optional int),
+          publisher-count: (optional uint),
           confidence: (optional uint),
           best-bid: (optional int),
           best-ask: (optional int),

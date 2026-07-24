@@ -59,11 +59,10 @@
 ;; 75 = the most fully-populated feeds (108 bytes each) that fit the 8192-byte update buffer.
 (define-constant MAX_FEEDS u75)
 (define-constant FEED_SLOTS (list
-  u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15
-  u16 u17 u18 u19 u20 u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31
-  u32 u33 u34 u35 u36 u37 u38 u39 u40 u41 u42 u43 u44 u45 u46 u47
-  u48 u49 u50 u51 u52 u53 u54 u55 u56 u57 u58 u59 u60 u61 u62 u63
-  u64 u65 u66 u67 u68 u69 u70 u71 u72 u73 u74
+  u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20
+  u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31 u32 u33 u34 u35 u36 u37 u38
+  u39 u40 u41 u42 u43 u44 u45 u46 u47 u48 u49 u50 u51 u52 u53 u54 u55 u56
+  u57 u58 u59 u60 u61 u62 u63 u64 u65 u66 u67 u68 u69 u70 u71 u72 u73 u74
 ))
 (define-constant PROPERTY_SLOTS (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12))
 
@@ -190,7 +189,6 @@
 )
 
 ;; Fold step: Parse one feed slot and append to `acc`
-;; Feed not appended to `acc` if required field(s) missing
 ;; On error, `acc` set to `(err ...)` and remaining feeds skipped
 (define-private (parse-feed-slot
     (slot_ uint)
@@ -201,10 +199,10 @@
       feeds: (list 75
         {
           feed-id: uint,
-          price: int,
-          exponent: int,
+          price: (optional int),
+          exponent: (optional int),
           confidence: (optional uint),
-          publisher-count: uint,
+          publisher-count: (optional uint),
           best-bid: (optional int),
           best-ask: (optional int),
           funding-rate: (optional int),
@@ -228,30 +226,15 @@
       acc
       (let (
           (parsed (try! (parse-one-feed (get bytes state) (get offset state))))
-          (feed (get feed parsed))
-          ;; Cursor advanced and this feed counted; returned unchanged when the feed
-          ;; is missing a required field (parsed past, but not appended)
           (advanced (merge state {
             offset: (get offset parsed),
             remaining: (- remaining u1),
           }))
-          (price (unwrap! (get price feed) (ok advanced)))
-          (exponent (unwrap! (get exponent feed) (ok advanced)))
-          (publisher-count (unwrap! (get publisher-count feed) (ok advanced)))
         )
         (ok (merge advanced {
           ;; NOTE: as-max-len? needs a LITERAL bound (u75), not the MAX_FEEDS constant
           feeds: (unwrap!
-            (as-max-len?
-              (append (get feeds advanced)
-                (merge feed {
-                  price: price,
-                  exponent: exponent,
-                  publisher-count: publisher-count,
-                })
-              )
-              u75
-            )
+            (as-max-len? (append (get feeds advanced) (get feed parsed)) u75)
             ERR_TOO_MANY_FEEDS
           ),
         }))
@@ -360,9 +343,10 @@
   )
 )
 
-;; Lazer's evm encoding has no Option type: A missing optional is encoded as 0, so the
-;; reference PythLazerLib treats a parsed 0 (price/bid/ask/confidence/publisher-count) as
-;; missing. We mirror that -- collapse 0 to none. Exponent 0 is a real value, kept literally.
+;; The Option-valued base props (price/bid/ask/confidence/ema-*) encode a missing value as 0,
+;; matching pyth-lazer-protocol's `Option<Price>` -- so collapse 0 to none. The plain-scalar
+;; props (exponent int16, publisher-count uint16, market-session) have no sentinel: 0 is a real
+;; value, kept literally.
 (define-private (some-if-nonzero-int (v int))
   (if (is-eq v 0)
     none
@@ -418,8 +402,9 @@
           offset: (+ voffset u8),
         }))
         (if (is-eq ptype PROP_PUBLISHER_COUNT)
+          ;; publisher-count is a plain uint16 in pyth-lazer-protocol (no 0-sentinel): 0 kept literally
           (ok (merge state {
-            publisher-count: (some-if-nonzero-uint (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)),
+            publisher-count: (some (unwrap! (read-uint-be? bytes voffset u2) ERR_INVALID_FEED_DATA)),
             offset: (+ voffset u2),
           }))
           (if (is-eq ptype PROP_EXPONENT)

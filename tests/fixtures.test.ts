@@ -102,16 +102,15 @@ const nonzeroUintOpt = (v: string | null | undefined) =>
 
 // === captured: real evm bytes must decode to Pyth's own parsed values ===
 
-// The decoder only emits feeds carrying all required fields; feeds missing one are dropped.
-const hasRequired = (f: any) => f.price != null && f.exponent != null && f.publisherCount != null;
-
+// Every property is optional; no feed is dropped. price collapses its 0-sentinel to none;
+// exponent (i16) and publisher-count (u16) keep 0 and map an absent property to none.
 const capturedFeed = (f: any) =>
   Cl.tuple({
     "feed-id": Cl.uint(f.priceFeedId),
-    price: Cl.int(BigInt(f.price)),
-    exponent: Cl.int(BigInt(f.exponent)),
+    price: nonzeroIntOpt(f.price),
+    exponent: optInt(big(f.exponent)),
     confidence: optUint(big(f.confidence)),
-    "publisher-count": Cl.uint(BigInt(f.publisherCount)),
+    "publisher-count": optUint(big(f.publisherCount)),
     "best-bid": optInt(big(f.bestBidPrice)),
     "best-ask": optInt(big(f.bestAskPrice)),
     "funding-rate": optInt(big(f.fundingRate)),
@@ -127,7 +126,7 @@ const capturedDecode = (c: any) =>
   Cl.tuple({
     timestamp: Cl.uint(BigInt(c.parsed.timestampUs)),
     channel: Cl.uint(c.channel),
-    "price-feeds": Cl.list(c.parsed.priceFeeds.filter(hasRequired).map(capturedFeed)),
+    "price-feeds": Cl.list(c.parsed.priceFeeds.map(capturedFeed)),
   });
 
 // === generated: build a payload from the spec, then sign with the TEST key ===
@@ -189,15 +188,15 @@ function buildUpdateFromSpec(spec: any): Uint8Array {
 }
 
 // PROP name -> decoder output field, kind, and how a spec value maps to the output option:
-//   sentinel  -- a 0 value decodes to none (protocol "missing" marker; applies to price, publisher-count, confidence, best-bid/ask, ema-*)
-//   literal   -- kept as-is, 0 included (exponent, market-session)
+//   sentinel  -- a 0 value decodes to none (protocol "missing" marker; applies to price, confidence, best-bid/ask, ema-*)
+//   literal   -- kept as-is, 0 included (exponent, publisher-count, market-session)
 //   existence -- existence-flagged (6/7/8/12): `null` -> none, any bigint -> some (present 0 kept)
 type OutRule = "sentinel" | "literal" | "existence";
 const PROP_OUT: Record<string, { field: string; kind: "int" | "uint"; rule: OutRule }> = {
   Price: { field: "price", kind: "int", rule: "sentinel" },
   Exponent: { field: "exponent", kind: "int", rule: "literal" },
   Confidence: { field: "confidence", kind: "uint", rule: "sentinel" },
-  PublisherCount: { field: "publisher-count", kind: "uint", rule: "sentinel" },
+  PublisherCount: { field: "publisher-count", kind: "uint", rule: "literal" },
   BestBidPrice: { field: "best-bid", kind: "int", rule: "sentinel" },
   BestAskPrice: { field: "best-ask", kind: "int", rule: "sentinel" },
   FundingRate: { field: "funding-rate", kind: "int", rule: "existence" },
@@ -209,9 +208,12 @@ const PROP_OUT: Record<string, { field: string; kind: "int" | "uint"; rule: OutR
   FeedUpdateTimestamp: { field: "feed-update-timestamp", kind: "uint", rule: "existence" },
 };
 
-// The optional tail (every field but feed-id + the 3 required), so the expected tuple is
-// built the same regardless of which props a spec carries.
-const OPTIONAL_OUT: Array<{ field: string; kind: "int" | "uint" }> = [
+// Every output field but feed-id (all optional now), so the expected tuple is built the same
+// regardless of which props a spec carries.
+const ALL_OUT: Array<{ field: string; kind: "int" | "uint" }> = [
+  { field: "price", kind: "int" },
+  { field: "exponent", kind: "int" },
+  { field: "publisher-count", kind: "uint" },
   { field: "confidence", kind: "uint" },
   { field: "best-bid", kind: "int" },
   { field: "best-ask", kind: "int" },
@@ -224,8 +226,8 @@ const OPTIONAL_OUT: Array<{ field: string; kind: "int" | "uint" }> = [
   { field: "feed-update-timestamp", kind: "uint" },
 ];
 
-// Build the expected decoded feed, or null if the decoder drops it (a required field --
-// price/exponent/publisher-count -- resolves to none). Each prop resolves per its rule above.
+// Build the expected decoded feed. Every field is optional and no feed is dropped: an absent
+// property resolves to none. Each prop resolves per its rule above (sentinel 0 -> none).
 function expectedFeedFromSpec(f: any) {
   const resolved = new Map<string, bigint | null>();
   for (const [name, v] of f.props) {
@@ -234,19 +236,12 @@ function expectedFeedFromSpec(f: any) {
     const val: bigint | null = v === null ? null : BigInt(v);
     resolved.set(o.field, o.rule === "sentinel" && val === 0n ? null : val);
   }
-  const present = (field: string) => resolved.get(field) != null;
-  if (!present("price") || !present("exponent") || !present("publisher-count")) return null;
   const opt = (field: string, kind: "int" | "uint") => {
     const v = resolved.get(field);
     return v == null ? Cl.none() : Cl.some(kind === "int" ? Cl.int(v) : Cl.uint(v));
   };
-  const fields: Record<string, ClarityValue> = {
-    "feed-id": Cl.uint(f.id),
-    price: Cl.int(resolved.get("price")!),
-    exponent: Cl.int(resolved.get("exponent")!),
-    "publisher-count": Cl.uint(resolved.get("publisher-count")!),
-  };
-  for (const { field, kind } of OPTIONAL_OUT) fields[field] = opt(field, kind);
+  const fields: Record<string, ClarityValue> = { "feed-id": Cl.uint(f.id) };
+  for (const { field, kind } of ALL_OUT) fields[field] = opt(field, kind);
   return Cl.tuple(fields);
 }
 
@@ -254,7 +249,7 @@ const expectedDecodeFromSpec = (spec: any) =>
   Cl.tuple({
     timestamp: Cl.uint(BigInt(spec.timestampUs)),
     channel: Cl.uint(spec.channel),
-    "price-feeds": Cl.list(spec.feeds.map(expectedFeedFromSpec).filter((x: any) => x !== null)),
+    "price-feeds": Cl.list(spec.feeds.map(expectedFeedFromSpec)),
   });
 
 describe("fixtures: captured real Lazer updates", () => {
