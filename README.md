@@ -2,11 +2,11 @@
 
 Clarity contracts for parsing and verifying **Pyth Lazer** ("Pyth Pro") price feeds on Stacks
 
-This contract is a replacement for [`stacks-pyth-bridge`](../stacks-pyth-bridge), which relies on the deprecated Pythnet.
+This project is a replacement for [`stacks-pyth-bridge`](../stacks-pyth-bridge), which relies on the deprecated Pythnet.
 The new architecture is simpler (no Wormhole, no Merkle proofs) and will result in lower transaction costs.
 However, due to changes in Pyth's licensing terms, we are not able to include price feed storage in these contracts.
 
-## How it Works
+## How It Works
 
 A consumer supplies a signed Lazer update to the oracle in the **`evm`** format (one secp256k1 signature over `keccak256(payload)`).
 The oracle verifies it through the decoder, and returns the parsed feeds for use in the same transaction: Nothing is persisted on-chain!
@@ -27,7 +27,7 @@ The other contracts are immutable, and changing them would require a full redepl
 ```bash
 npm install    # install deps
 npm test       # Run the unit tests (simnet)
-clarinet check # Run Static analysis
+clarinet check # Run static analysis
 ```
 
 Note that `npm test` relies on `clarinet-sdk`, so the `clarinet` binary isn't required for this step.
